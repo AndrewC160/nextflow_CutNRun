@@ -24,4 +24,31 @@ The environment can then be activated using:
 
 This pipeline is also is missing R packages `clugPac`, `ascFunctions`, and `ascCutNRun`. These are not necessary for any steps other than the final report, and they will be updated shortly.
 
+## Execution
+
+The Nextflow pipeline is executed within the `conda` environment using the command:
+```
+nextflow run cutNrun.nf \
+  --sample_table <sample_table> \
+  --dir_out <output/directory/path> \
+  --control_epitope <background_epitope>
+```
+
+At minimum, three parameters should be provided to the nextflow pipeline, as well:
+
+`-sample_table`: Filename of the input CSV file containing all sample details.
+
+`-dir_out`: Output directory into which outputs will be published.
+
+`-control_epitope`: Control epitope used for background signal, typically "IgG". This value must match at least one sample within the `sample_table` *per sample/condition combination*. All cell line/condition combinations are expected to have at least one background sample.
+
+### Input table
+
+The primary input of the `cutNrun.nf` pipeline is a CSV file containing one sample per row with annotations for each file and FastQ files for reads 1 and 2. The table format is:
+
+name | cell_line | epitope | condition | replicate | R1 | R2 
+--- | --- | --- | --- | --- | --- |---
+H358_MYC_WT_1 | H358      | MYC     | WT        |     1     | R1.fastq.gz | R2.fastq.gz
+H358_MYC_WT_1 | H358      | MYC     | WT        |     2     | R1.fastq.gz | R2.fastq.gz
+H358_IgG_WT_1 | H358      | IgG     | WT        |     1     | R1.fastq.gz | R2.fastq.gz
 
