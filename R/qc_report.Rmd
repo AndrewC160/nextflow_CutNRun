@@ -1,0 +1,744 @@
+---
+title: "Cut&Run QC Report"
+author: "Andrew Clugston"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: spacelab
+    code_folding: hide
+params:
+  sample_table: "/N/p/asclab/ASC-cutNrun/25FEB27-mromanmoreno/data2_test/file_table.csv"
+  output_dir: "/N/p/asclab/ASC-cutNrun/25FEB27-mromanmoreno/data2_test"
+  ctrl_epitope: "IgG"
+---
+
+```{r setup, include=FALSE}
+# rmarkdown::render("/N/p/asclab/ASC-cutNrun/25FEB27-mromanmoreno/src/nextflow_cutNrun/R/qc_report.Rmd",
+#                   output_format = "html_document",
+#                   params = list(
+#                     sample_table="/N/p/asclab/ASC-cutNrun/raw/moreno_25FEB25/MRM12476/file_table.csv",
+#                     output_dir="/N/p/asclab/ASC-cutNrun/25FEB27-mromanmoreno/data",
+#                     ctrl_epitope="IgG"))
+# rmarkdown::render("/N/p/asclab/ASC-cutNrun/25FEB27-mromanmoreno/src/nextflow_cutNrun/R/qc_report.Rmd",
+#                   output_format = "html_document",
+#                   output_dir = "./",
+#                   params = list(
+#                     sample_table="/N/p/asclab/ASC-cutNrun/25FEB27-mromanmoreno/data2_test/file_table.csv",
+#                     output_dir="/N/p/asclab/ASC-cutNrun/25FEB27-mromanmoreno/data2_test",
+#                     ctrl_epitope="IgG"))
+library(tidyverse) 
+library(ascCutNRun)
+library(data.table)
+library(clugPac)
+library(ggplot2)
+library(magrittr)
+library(scales)
+library(knitr)
+library(kableExtra)
+library(ascFunctions)
+library(cowplot)
+library(GenomicRanges)
+
+# Aliases.
+mutate  <- dplyr::mutate
+filter  <- dplyr::filter
+arrange <- dplyr::arrange
+rename  <- dplyr::rename
+o_write <- TRUE
+
+dirs      <- list(data=file.path(params$output_dir))
+dirs$reps <- file.path(dirs$data,"replicates")
+dirs$pools<- file.path(dirs$data,"pooled")
+
+knitr::opts_chunk$set(echo = TRUE,fig.width = 6,fig.height = 6)
+```
+
+```{r loadData, echo=FALSE}
+tb_samps <- fread(params$sample_table) %>%
+  as_tibble %>%
+  mutate(epitope = factor(epitope,levels = select(.,epitope) %>% unlist %>% unique %>% setdiff(params$ctrl_epitope) %>% c(params$ctrl_epitope)),
+         qc_dir = file.path(dirs$reps,name,"qc"),
+         alg_dir = file.path(dirs$reps,name,"align"),
+         peak_dir = file.path(dirs$reps,name,"peaks"),
+         bam_hg38 = file.path(alg_dir,paste0(name,"_hg38.bam")),
+         spike_tsv = file.path(alg_dir,paste0(name,"_spike.tsv")),
+         nPeaks = file.path(peak_dir,paste0(name,"_peaks.narrowPeak")),
+         nSummits = file.path(peak_dir,paste0(name,"_summits.bed")),
+         pileup = file.path(peak_dir,paste0(name,"_treat_pileup.bdg.gz")),
+         bPeaks = file.path(peak_dir,paste0(name,"_peaks.broadPeak")),
+         frip = file.path(qc_dir,paste0(name,"_narrowPeaks_FRiP.txt")),
+         fq_raw1 = paste0(qc_dir,"/",name,"_val_1_fastqc.zip"),
+         fq_raw2 = paste0(qc_dir,"/",name,"_val_2_fastqc.zip"),
+         fq_flt_hg38 = paste0(qc_dir,"/",name,"_hg38_short_fastqc.zip"),
+         fq_flt_sac3 = paste0(qc_dir,"/",name,"_sac3_short_fastqc.zip")) %>%
+  mutate(pool = ifelse(epitope == params$ctrl_epitope,
+                       paste("bkg",cell_line,cond,sep="_"),
+                       paste(cell_line,epitope,cond,sep="_"))) %>%
+  select(name,cell_line,epitope,cond,rep,pool,everything())
+
+tb_pools <- tb_samps %>%
+  select(pool,cell_line,epitope,cond) %>%
+  rename(name = pool) %>%
+  distinct() %>%
+  filter(epitope != params$ctrl_epitope) %>%
+  mutate(pool_dir = file.path(dirs$pools,name),
+         peak_dir = file.path(pool_dir,"peaks"),
+         meme_dir = file.path(pool_dir,"meme"),
+         spike_tsv = file.path(pool_dir,paste0(name,"_spike.tsv")),
+         nPeaks = file.path(peak_dir,paste0(name,"_peaks.narrowPeak")),
+         nSummits = file.path(peak_dir,paste0(name,"_summits.bed")),
+         pileup = file.path(peak_dir,paste0(name,"_treat_pileup.bdg.gz")),
+         bPeaks = file.path(peak_dir,paste0(name,"_peaks.broadPeak")))
+
+gn_tsv <- file.path("genes.tsv")
+gr_gns <- gtf_to_genes(cache_file = gn_tsv)
+```
+
+# FastQC
+## Raw {.tabset}
+```{r fastqcRead}
+tb_fq <- tb_samps %>%
+  filter(file.exists(fq_raw1) & file.exists(fq_raw2)) %>%
+  select(name,cell_line,epitope,rep,starts_with("fq_raw"))
+
+fq_raw1 <- clugPac::read_fastqc(tb_fq$fq_raw1)
+fq_raw2 <- clugPac::read_fastqc(tb_fq$fq_raw2)
+
+fq_raw  <- lapply(names(fq_raw1), function(nm){
+  tb1   <- fq_raw1[[nm]]
+  tb2   <- fq_raw2[[nm]]
+  
+  if(!is.null(tb1)){
+    tb1 <- mutate(tb1,read="R1")
+  }
+  if(!is.null(tb2)){
+    tb2 <- mutate(tb2,read="R2")
+  }
+  if(!is.null(tb1) & !is.null(tb2)){
+    tb <- rbind(tb1,tb2)
+  }else if(!is.null(tb1)){
+    tb <- tb1
+  }else if(is.null(tb2)){
+    tb <- tb2
+  }else{
+    tb <- NULL
+  }
+  return(as_tibble(tb))
+}) %>% setNames(names(fq_raw1))
+```
+
+### Flag summary
+```{r fastqcSummary,fig.height=6,fig.width=6}
+if(is.null(fq_raw$summary)){
+  p <- ggplot() + theme_void()
+}else{
+  tb_p  <- fq_raw$summary %>%
+    mutate(name = gsub("_val_[12]$","",name)) %>%
+    separate(name,into=c("cell_line","epitope","cond","rep"),sep = "_",remove = FALSE) %>%
+    select(-cond) %>%
+    mutate(cell_line = factor(cell_line),
+           epitope = factor(epitope,levels=c("KLF5","IgG")),
+           read = factor(read),
+           rep = factor(rep),
+           flag = factor(flag,levels=c("pass","warn","fail")),
+           title = factor(title),
+           idx = row_number()) %>%
+    rowwise %>%
+    mutate(x = ifelse(read == "R1",list(c(0,1,0)),list(c(0,1,1))),
+           y = ifelse(read == "R1",list(c(1,1,0)),list(c(0,1,0)))) %>%
+    ungroup %>%
+    unnest(c(x,y)) %>%
+    mutate(x = x + (as.integer(rep)-1),
+           y = y + (as.integer(title)-1))
+  
+  y_labs  <- levels(tb_p$title)
+  y_labs  <- setNames(c(1:length(y_labs))-0.5,y_labs)
+  x_labs  <- levels(tb_p$rep)
+  x_labs  <- setNames(c(1:length(x_labs))-0.5,x_labs)
+  p <- ggplot(tb_p,aes(x=x,y=y,group=idx,fill=flag)) +
+    facet_wrap(.~cell_line,
+               nrow=1,
+               scales = "free_x") +
+    scale_x_continuous(name = "Replicate",
+                       expand=c(0,0),
+                       breaks=x_labs,
+                       labels = names(x_labs)) +
+    scale_y_reverse(expand=c(0,0),
+                       breaks = y_labs,
+                       labels = names(y_labs))+
+    scale_fill_manual(values=c(pass="lightgreen",
+                               warn="orange",
+                               fail="firebrick")) +
+    geom_polygon(color="black") +
+    annotate(geom = "text",x=0.05,y=0.95,hjust=0,vjust=0,label="R1",size=2.5) +
+    annotate(geom = "text",x=0.95,y=0.05,hjust=1,vjust=1,label="R2",size=2.5) +
+    ggtitle("Raw reads") +
+    theme_minimal() +
+    theme(axis.title.y = element_blank(),
+          legend.title = element_blank(),
+          plot.background= element_rect(fill="white",color=NA))
+}
+plot(p)
+```
+
+### FastQ Reads
+```{r tableStats}
+tb_stats <- fq_raw$basic_statistics %>%
+  filter(read == "R1") %>%
+  mutate(name = gsub("_val_1","",name),
+         measure = gsub(" ","_",gsub("%","pct_",tolower(measure)))) %>%
+  pivot_wider(id_cols = name,
+              names_from = measure,
+              values_from = value) %>%
+  select(name,total_sequences,total_bases,sequence_length,pct_gc) %>%
+  mutate(total_sequences = as.double(total_sequences)) %>%
+  left_join(by="name",
+    select(tb_samps,name,cell_line,epitope,rep)) %>%
+  arrange(cell_line,epitope) %>%
+  mutate(name = factor(name,levels=select(.,name) %>% unlist %>% unique)) %>%
+  select(cell_line,epitope,rep,everything())
+
+tb_stats %>%
+  mutate(total_sequences = prettyNumbers(total_sequences)) %>%
+  kable %>%
+  kable_styling(full_width=FALSE)
+```
+```{r plotFastqReads,fig.width=8,fig.height=5}
+ggplot(tb_stats,aes(x=name,y=total_sequences,fill=epitope,label=paste0(prettyNumbers(total_sequences,digs = 1),"\n"))) +
+  facet_wrap(.~cell_line,scales="free_x",nrow=1) +
+  scale_y_continuous(labels = prettyNumbers,name="Reads",expand=expansion(mult=c(0,0.1))) +
+  #scale_fill_manual(values=c(KLF5="lightblue",IgG = "gray50")) +
+  geom_bar(stat='identity',position = "dodge",color='black',linewidth=0.5) +
+  geom_text(size=2) +
+  ggtitle("FastQ read counts",subtitle= "Unfiltered") +
+  theme(plot.background = element_rect(fill="white",color=NA),
+        plot.subtitle = element_text(face="italic"),
+        panel.background = element_blank(),
+        panel.border = element_rect(fill = NA,color='black'),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(linewidth=0.5,color="gray80"),
+        legend.title = element_blank(),
+        axis.text.x = element_text(angle=45,hjust=1,vjust=1,size=5),
+        axis.ticks.x = element_blank(),
+        strip.background = element_blank(),
+        axis.title.x = element_blank())
+```
+
+### Per-base quality scores
+```{r plotPerBaseSequenceQuality,fig.width=10,fig.height=4}
+tb_p <- fq_raw$per_base_sequence_quality %>%
+  mutate(base = ifelse(read == "R2",-base,base),
+         name = gsub("_val_[12]$","",name))
+
+ggplot(tb_p,aes(x=base,y=mean,color=name)) +
+  facet_wrap(.~read,nrow=1,scales="free_x") +
+  scale_x_continuous(name="Base (bp)",expand=c(0,0),labels=abs) + 
+  scale_y_continuous(name="Quality score") +
+  geom_line() +
+  ggtitle("Per-base quality scores",subtitle= "Unfiltered") +
+  theme(plot.background = element_rect(fill="white",color=NA),
+        plot.subtitle = element_text(face="italic"),
+        panel.background = element_blank(),
+        panel.border = element_rect(fill = NA,color='black'),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(linewidth=0.5,color="gray80"),
+        legend.title = element_blank(),
+        axis.ticks.x = element_blank(),
+        strip.background = element_blank())
+```
+
+### Per-base sequence content
+```{r perBaseSequenceContent,fig.height=6,fig.width=8}
+tb_p <- fq_raw$per_base_sequence_content %>%
+  mutate(name = gsub("_val_[12]$","",name),
+         base = ifelse(read == "R2",-base,base)) %>%
+  as_tibble %>%
+  left_join(select(tb_samps,name,cell_line,epitope,rep),by="name") %>%
+  mutate(cond = paste(cell_line,rep)) %>%
+  rename(position = base) %>%
+  pivot_longer(cols=c(a,c,g,t),names_to = "base",values_to="percent")
+
+ggplot(tb_p,aes(x=position,y=percent,color=cond,linetype=base)) +
+  facet_grid(rows=vars(epitope),cols=vars(read),scales="free_x") +
+  scale_x_continuous(name="Base",expand=c(0,0),labels=abs) +
+  scale_y_continuous(name="Percent",labels = function(x) paste0(x,"%")) +
+  geom_line() +
+  ggtitle("Per-base sequence content",subtitle="Unfiltered") +
+  theme(plot.background = element_rect(fill="white",color=NA),
+          plot.subtitle = element_text(face="italic"),
+          panel.background = element_blank(),
+          panel.border = element_rect(fill = NA,color='black'),
+          panel.grid.major.x = element_blank(),
+          panel.grid.major.y = element_line(linewidth=0.5,color="gray80"),
+          legend.title = element_blank(),
+          axis.ticks.x = element_blank(),
+          strip.background = element_blank())
+```
+
+### Per-sequence GC content
+```{r perSequenceGCContent,fig.height=6,fig.width=8}
+tb_p  <- fq_raw$per_sequence_gc_content %>%
+  mutate(name = gsub("_val_[12]$","",name),
+         read = factor(read)) %>% 
+  left_join(select(tb_samps,name,cell_line,epitope,rep),by="name") %>%
+  mutate(name = paste(cell_line,rep))
+
+ggplot(tb_p,aes(x=gc_content,y=count,color=name,group=name)) +
+  facet_grid(rows=vars(epitope),cols=vars(read),scales="free") +
+  scale_x_continuous(name = "GC content",labels=function(x) paste0(x,"%")) +
+  scale_y_continuous(name = "Reads",labels=prettyNumbers) +
+  geom_line() +
+  ggtitle("Per-sequence GC content",subtitle="Unfiltered") +
+  theme(plot.background = element_rect(fill="white",color=NA),
+            plot.subtitle = element_text(face="italic"),
+            panel.background = element_blank(),
+            panel.border = element_rect(fill = NA,color='black'),
+            panel.grid.major.x = element_blank(),
+            panel.grid.major.y = element_line(linewidth=0.5,color="gray80"),
+            legend.title = element_blank(),
+            axis.ticks.x = element_blank(),
+            strip.background = element_blank())
+```
+
+## Aligned & filtered {.tabset}
+```{r fastqcReadFilt}
+tb_fq <- tb_samps %>%
+  mutate(fq_flt_hg38 = paste0(qc_dir,"/",name,"_hg38_short_fastqc.zip")) %>%
+         #fq_flt_sac3 = paste0(qc_dir,"/",name,"_sac3_short_fastqc.zip")) %>%
+  filter(file.exists(fq_flt_hg38)) %>%
+  select(name,cell_line,epitope,rep,starts_with("fq"))
+
+fq_hg38 <- clugPac::read_fastqc(tb_fq$fq_flt_hg38)
+#fq_sac3 <- clugPac::read_fastqc(tb_fq$fq_flt_sac3)
+```
+
+### Flag summary
+```{r fastqcSummaryFilt,fig.height=6,fig.width=6}
+tb_p  <- fq_hg38$summary %>%
+  mutate(name = gsub("_hg38_short$","",name)) %>%
+  separate(name,into=c("cell_line","epitope","cond","rep"),sep = "_",remove = FALSE) %>%
+  select(-cond) %>%
+  mutate(cell_line = factor(cell_line),
+         epitope = factor(epitope,levels=c("KLF5","IgG")),
+         rep = factor(rep),
+         flag = factor(flag,levels=c("pass","warn","fail")),
+         title = factor(title,levels=select(.,title) %>% unlist %>% unique %>% sort %>% rev))
+
+ggplot(tb_p,aes(x=rep,y=title,fill=flag)) +
+  facet_wrap(.~cell_line,nrow=1) +
+  scale_x_discrete(name="Replicates") +
+  scale_fill_manual(values=c(pass="lightgreen",
+                             warn="orange",
+                             fail="firebrick")) +
+  geom_tile(color="black") +
+  ggtitle("Filtered reads") +
+  theme_minimal() +
+  theme(axis.title.y = element_blank(),
+        legend.title = element_blank(),
+        plot.background= element_rect(fill="white",color=NA),
+        panel.grid = element_blank())
+```
+
+### FastQ Reads
+```{r tableStatsFilt}
+tb_stats <- fq_hg38$basic_statistics %>%
+  as_tibble %>%
+  mutate(name = gsub("_hg38_short","",name),
+         measure = gsub(" ","_",gsub("%","pct_",tolower(measure)))) %>%
+  pivot_wider(id_cols = name,
+              names_from = measure,
+              values_from = value) %>%
+  select(name,total_sequences,total_bases,sequence_length,pct_gc) %>%
+  mutate(total_sequences = as.double(total_sequences)) %>%
+  left_join(by="name",
+    select(tb_samps,name,cell_line,epitope,rep)) %>%
+  arrange(cell_line,epitope) %>%
+  mutate(name = factor(name,levels=select(.,name) %>% unlist %>% unique)) %>%
+  select(cell_line,epitope,rep,everything())
+
+tb_stats %>%
+  mutate(total_sequences = prettyNumbers(total_sequences)) %>%
+  kable %>%
+  kable_styling(full_width=FALSE)
+```
+
+```{r plotFastqReadsFilt,fig.height=4,fig.width=8}
+ggplot(tb_stats,aes(x=name,y=total_sequences,fill=epitope,label=paste0(prettyNumbers(total_sequences,digs = 1),"\n"))) +
+  facet_wrap(.~cell_line,scales="free_x",nrow=1) +
+  scale_y_continuous(labels = prettyNumbers,name="Reads",expand=expansion(mult=c(0,0.1))) +
+  #scale_fill_manual(values=c(KLF5="lightblue",IgG = "gray50")) +
+  geom_bar(stat='identity',position = "dodge",color='black',linewidth=0.5) +
+  geom_text(size=2) +
+  ggtitle("FastQ read counts",subtitle= "Filtered") +
+  theme(plot.background = element_rect(fill="white",color=NA),
+        plot.subtitle = element_text(face="italic"),
+        panel.background = element_blank(),
+        panel.border = element_rect(fill = NA,color='black'),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(linewidth=0.5,color="gray80"),
+        legend.title = element_blank(),
+        axis.text.x = element_text(angle=45,hjust=1,vjust=1,size=5),
+        axis.ticks.x = element_blank(),
+        strip.background = element_blank(),
+        axis.title.x = element_blank())
+```
+
+### Per-base quality scores
+```{r plotPerBaseSequenceQualityFilt,fig.width=8,fig.height=4}
+tb_p <- fq_hg38$per_base_sequence_quality %>%
+  mutate(name = gsub("_hg38_short$","",name))
+
+ggplot(tb_p,aes(x=base,y=mean,color=name)) +
+  scale_x_continuous(name="Base (bp)",expand=c(0,0),labels=abs) + 
+  scale_y_continuous(name="Quality score") +
+  geom_line() +
+  ggtitle("Per-base quality scores",subtitle= "Filtered") +
+  theme(plot.background = element_rect(fill="white",color=NA),
+        plot.subtitle = element_text(face="italic"),
+        panel.background = element_blank(),
+        panel.border = element_rect(fill = NA,color='black'),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(linewidth=0.5,color="gray80"),
+        legend.title = element_blank(),
+        axis.ticks.x = element_blank(),
+        strip.background = element_blank())
+```
+
+
+### Per-base sequence content
+```{r perBaseSequenceContentFilt,fig.width=8,fig.height=5}
+tb_p <- fq_hg38$per_base_sequence_content %>%
+  mutate(name = gsub("_hg38_short$","",name)) %>%
+  as_tibble %>%
+  left_join(select(tb_samps,name,cell_line,epitope,rep),by="name") %>%
+  mutate(cond = paste(cell_line,rep)) %>%
+  rename(position = base) %>%
+  pivot_longer(cols=c(a,c,g,t),names_to = "base",values_to="percent")
+
+ggplot(tb_p,aes(x=position,y=percent,color=cond,linetype=base)) +
+  facet_grid(rows=vars(epitope)) +
+  scale_x_continuous(name="Base",expand=c(0,0),labels=abs) +
+  scale_y_continuous(name="Percent",labels = function(x) paste0(x,"%")) +
+  geom_line() +
+  ggtitle("Per-base sequence content",subtitle="Filtered") +
+  theme(plot.background = element_rect(fill="white",color=NA),
+          plot.subtitle = element_text(face="italic"),
+          panel.background = element_blank(),
+          panel.border = element_rect(fill = NA,color='black'),
+          panel.grid.major.x = element_blank(),
+          panel.grid.major.y = element_line(linewidth=0.5,color="gray80"),
+          legend.title = element_blank(),
+          axis.ticks.x = element_blank(),
+          strip.background = element_blank())
+```
+
+### Per-sequence GC content
+```{r perSequenceGCContentFilt,fig.width=8,fig.height=5}
+tb_p  <- fq_hg38$per_sequence_gc_content %>%
+  mutate(name = gsub("_hg38_short$","",name)) %>% 
+  left_join(select(tb_samps,name,cell_line,epitope,rep),by="name") %>%
+  mutate(name = paste(cell_line,rep))
+
+ggplot(tb_p,aes(x=gc_content,y=count,color=name,group=name)) +
+  facet_grid(rows=vars(epitope)) +
+  scale_x_continuous(name = "GC content",labels=function(x) paste0(x,"%")) +
+  scale_y_continuous(name = "Reads",labels=prettyNumbers) +
+  geom_line() +
+  ggtitle("Per-sequence GC content",subtitle="Filtered") +
+  theme(plot.background = element_rect(fill="white",color=NA),
+            plot.subtitle = element_text(face="italic"),
+            panel.background = element_blank(),
+            panel.border = element_rect(fill = NA,color='black'),
+            panel.grid.major.x = element_blank(),
+            panel.grid.major.y = element_line(linewidth=0.5,color="gray80"),
+            legend.title = element_blank(),
+            axis.ticks.x = element_blank(),
+            strip.background = element_blank())
+```
+
+# Alignment stats
+
+Alignment percentages are calculated as **reads successfully mapped to hg38 or sac3 genomes / total reads**.
+
+When calculating scores between samples, the ratio of *Sac3* to *hg38* reads can be used to normalize: we assume all samples had an equivalent number of *Sac3* reads spiked, and thus **any missing *Sac3* reads indicate missing *hg38* reads as well**. For this reason, we can *scale down reads of all samples to match the sample with the lowest ratio*. In other words, **we assume the lowest ratio sample lost reads and so we down-sample all others to match it.**
+
+For instance, if **SampleA** has a ratio of 0.02 and **SampleB** has a ratio of 0.01, each ratio is divided into 0.01 to give factors of 0.5 (**SampleA**) and 1 (**SampleB**). A peak with 100 reads in **SampleA** and 50 reads in **SampleB** would be multiplied by their respective factors to both be 50.
+```{r loadSpikes,fig.height=6,fig.width=8}
+fls_spike <- tb_samps %>%
+  filter(file.exists(spike_tsv)) %>%
+  vectify(spike_tsv,name)
+
+type_levs=c(ambiguous="gray",unmapped="pink",sac3="purple",hg38="darkgreen")
+
+tb_p <- lapply(names(fls_spike), function(nm) {
+    fread(fls_spike[nm],col.names=c("type","reads")) %>%
+      mutate(type = case_when(grepl("_hg38_",type) ~ "hg38",
+                              grepl("_sac3_",type) ~ "sac3",
+                              TRUE ~ type),
+             name = nm)
+  }) %>% do.call(rbind,.) %>%
+  group_by(name) %>%
+  mutate(type = factor(type,levels=names(type_levs))) %>%
+  ungroup %>%
+  left_join(by="name",
+    select(tb_samps,name,cell_line,epitope,rep)) %>%
+  mutate(cond = paste(cell_line,rep),
+         epitope = factor(epitope,levels=c("KLF5","IgG")))
+
+tb_labs <- tb_p %>%
+  mutate(stat = ifelse(type %in% c("hg38","sac3"),"aligned","unaligned")) %>%
+  group_by(cond,name,epitope,stat) %>%
+  summarize(total = sum(reads),.groups='drop_last') %>%
+  mutate(frac = total / sum(total)) %>%
+  ungroup %>%
+  filter(stat=='aligned')
+
+p1 <- ggplot(tb_p,aes(x=cond,y=reads,fill=type)) +
+  facet_wrap(.~epitope,nrow=1,scales="free_x") +
+  scale_y_continuous(name = "Reads",labels=prettyNumbers,expand=expansion(mult=c(0,0.1))) +
+  scale_fill_manual(values=type_levs) +
+  geom_bar(stat='identity') +
+  geom_text(data=tb_labs,mapping=aes(x=cond,y=total,label=paste0("\n",percent(frac,accuracy=1))),
+            color="white",inherit.aes=FALSE) +
+  ggtitle("Read alignment",subtitle="Alignment percentage calculated from hg38 + sac3 reads.") +
+  theme(plot.background = element_rect(fill="white",color=NA),
+        plot.subtitle = element_text(face="italic"),
+        panel.background = element_blank(),
+        panel.border = element_rect(fill=NA,color="black"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(linewidth=0.5,color='gray75'),
+        strip.background = element_blank(),
+        axis.text.x = element_text(angle=90,hjust=1,vjust=0.5),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.title = element_blank())
+
+tb_p2 <- tb_p %>%
+  filter(type %in% c("sac3","hg38")) %>%
+  group_by(name) %>%
+  mutate(ratio = reads / sum(reads)) %>%
+  filter(type == "sac3")
+p2 <- ggplot(tb_p2,aes(x=cond,y=ratio,label=paste0("\n",percent(ratio,accuracy=0.01)))) +
+  facet_wrap(.~epitope,nrow=1,scales="free_x") +
+  scale_y_reverse(name= "Sac3/hg38 Ratio",labels=percent,expand=expansion(mult=c(0.1,0))) +
+  geom_bar(stat='identity',fill='purple',color="black",linewidth=0.25) +
+  geom_text() +
+  theme(plot.background = element_rect(fill="white",color=NA),
+        plot.subtitle = element_text(face="italic"),
+        panel.background = element_blank(),
+        panel.border = element_rect(fill=NA,color="black"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(linewidth=0.5,color='gray75'),
+        strip.background = element_blank(),
+        strip.text = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.title = element_blank())
+
+plot_grid(p1,p2,ncol=1,align='v',axis='lr',rel_heights = c(5,3))
+```
+
+# Peak calling
+
+For individual samples, peaks are called using the genome-wide median as a background.
+
+## FRiP
+
+```{r indPeakcalling,height=4,width=6}
+fls_frip <- tb_samps %>%
+  filter(file.exists(frip)) %>%
+  vectify(frip,name)
+
+tb_p <- lapply(names(fls_frip),function(nm) {
+  fread(fls_frip[nm]) %>%
+    as_tibble %>%
+    mutate(name = nm)
+}) %>% do.call(rbind,.) %>%
+  mutate(cell_line = str_extract(name,"^[:alnum:]+"),
+         epitope = str_match(name,"^[:alnum:]+_([:alnum:]+)")[,2])
+
+tb_lab <- tibble(x=0.5,y=0.3,label="Minimum FRiP\n(Cut&Run)",cell_line=tb_p$cell_line[1])
+
+ggplot(tb_p,aes(x=name,y=frip,fill=epitope)) +
+  facet_wrap(.~cell_line,scales='free_x',nrow=1,strip.position='top') +
+  scale_y_continuous(name="FRiP",labels=percent,limits=c(0,1),expand=c(0,0)) +
+  geom_bar(stat='identity',color='black',linewidth=0.25) +
+  geom_hline(yintercept = 0.3,color='red',linetype='dashed') +
+  geom_text(data=tb_lab,mapping=aes(x=x,y=y,label=label),
+            color="red",hjust=0,
+            inherit.aes=FALSE) +
+  ggtitle("Fraction of Reads in Peaks") +
+  theme(plot.background = element_blank(),
+        panel.background = element_blank(),
+        panel.border = element_rect(fill=NA,color="black",linewidth = 0.5),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(linewidth=0.5,color='gray85'),
+        strip.background = element_blank(),
+        axis.text.x = element_text(angle=45,hjust=1,vjust=1),
+        axis.title.x = element_blank())
+```
+
+## Peak calling details
+```{r peakDetails,fig.height=10,fig.width=6}
+p_fls <- tb_samps %>%
+  filter(file.exists(nPeaks)) %>%
+  vectify(nPeaks,name)
+
+tb_pks <- lapply(names(p_fls),function(nm){
+  ascCutNRun::read_peak_file(p_fls[nm]) %>%
+    mutate(name = nm)
+}) %>% do.call(rbind,.) %>%
+  left_join(by='name',
+    select(tb_samps,name,cell_line,epitope,rep)) %>%
+  mutate(epitope = factor(epitope,levels=c("KLF5","IgG"))) %>%
+  arrange(epitope) %>%
+  mutate(name = factor(name,levels=select(.,name) %>% unlist %>% unique),
+         width = end - start)
+
+tb_p <- tb_pks %>%
+  group_by(name,cell_line,epitope,rep) %>%
+  tally(name = "count") %>%
+  ungroup
+
+p_c <- ggplot(tb_p,aes(x=name,y=count,fill=epitope)) +
+  facet_wrap(.~cell_line,nrow=1,scales="free_x") +
+  scale_y_continuous(expand=expansion(mult=c(0,0.1)),labels=prettyNumbers,name="Peaks") +
+  #scale_fill_manual(values=c(KLF5="lightblue",IgG="gray")) +
+  geom_bar(stat="identity",color='black',linewidth=0.5) +
+  theme(plot.background = element_rect(fill="white",color=NA),
+        panel.background = element_blank(),
+        panel.border = element_rect(fill=NA,color="black"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(linewidth=0.5,color='gray85'),
+        strip.background = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.title = element_blank(),
+        legend.position = 'none')
+
+p_q <- ggplot(tb_pks,aes(x=name,y=nlog10q,fill=epitope)) +
+  facet_wrap(.~cell_line,ncol=2,scales="free_x") +
+  scale_y_log10(name="-log10(Q)",labels = prettyNumbers) +
+  #scale_fill_manual(values=c(KLF5="lightblue",IgG="gray")) +
+  geom_violin(draw_quantiles = 0.5,scale = "width") +
+  theme(plot.background = element_rect(fill="white",color=NA),
+        panel.background = element_blank(),
+        panel.border = element_rect(fill=NA,color="black"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(linewidth=0.5,color='gray85'),
+        strip.background = element_blank(),
+        strip.text = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.title = element_blank())
+
+p_w <- ggplot(tb_pks,aes(x=name,y=width,fill=epitope)) +
+  facet_wrap(.~cell_line,ncol=2,scales="free_x") +
+  scale_y_log10(name="Width",labels = prettyBP) +
+  #scale_fill_manual(values=c(KLF5="lightblue",IgG="gray")) +
+  geom_violin(draw_quantiles = 0.5,scale = "width") +
+  theme(plot.background = element_rect(fill="white",color=NA),
+        panel.background = element_blank(),
+        panel.border = element_rect(fill=NA,color="black"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(linewidth=0.5,color='gray85'),
+        strip.background = element_blank(),
+        strip.text = element_blank(),
+        axis.text.x = element_text(angle=45,hjust=1,vjust=1),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.title = element_blank(),
+        legend.position = 'none')
+
+cowplot::plot_grid(p_c,p_q,p_w,ncol=1,align='v',axis='lr',rel_heights = c(2,2,3))
+```
+
+# Regional plots {.tabset}
+```{r }
+tb_fls <- select(tb_pools,name,cell_line,epitope,nPeaks,pileup)
+
+tb_npks <- vectify(tb_fls,nPeaks,name)
+
+gr_npks <- lapply(names(tb_npks), function(nm) {
+  read_peak_file(tb_npks[[nm]]) %>% 
+    makeGRangesFromDataFrame(keep.extra.columns = TRUE) %>%
+    reduce %>%
+    as_tibble %>%
+    mutate(name = nm)
+  }) %>% do.call(rbind,.) %>%
+  mutate(seqnames = factor(seqnames,levels=paste0("chr",c(1:22,"X","Y")))) %>%
+  filter(!is.na(seqnames)) %>%
+  left_join(select(tb_fls,name,cell_line,epitope),by='name') %>%
+  makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+
+# gr_window <- tb_npks %>%
+#   filter(epitope == "KLF5") %>%
+#   arrange(desc(nlog10q)) %>%
+#   filter(row_number() == 1) %>%
+#   makeGRangesFromDataFrame %>%
+#   resize(width=width(.)*10,fix='end')
+
+plot_region <- function(gr_window){
+  tb_bdg  <- tb_fls %>%
+    vectify(pileup,name) %>%
+    scan_bdg(gr_regions = gr_window) %>%
+    left_join(select(tb_fls,name,cell_line,epitope),by="name")
+  
+  tb_scales <- tb_bdg %>%
+    group_by(cell_line) %>%
+    mutate(ymax = max(score)) %>%
+    ungroup %>%
+    select(name,ymax) %>%
+    distinct
+  
+  tb_pks <- subset_and_trim_gr(gr_npks,gr_window) %>% 
+    as_tibble
+    
+  x_rng <- c(start(gr_window),end(gr_window))
+  p <- ggplot(tb_bdg,aes(xmin=start,xmax=end,ymin=0,ymax=score,fill=epitope)) +
+    facet_wrap(.~name,scales="free_y",strip.position = "right",ncol=1) +
+    scale_x_continuous(name= grange_desc(gr_window),expand=c(0,0),limits=x_rng,labels=prettyBP) +
+    scale_y_continuous(name= "Pileup",expand=expansion(mult=c(0,0.1)),labels=function(x) ifelse(x>0,prettyNumbers(x),""),n.breaks = 3) +
+    #scale_fill_manual(values=c(KLF5="lightblue",IgG="grey")) +
+    geom_rect(data=tb_pks,mapping=aes(xmin=start,xmax=end,ymin=0,ymax=Inf,fill = epitope),alpha=0.2,color='black',linewidth=0.1,linetype='dashed') +
+    geom_rect(data=tb_scales,mapping=aes(ymax=ymax),xmin=-Inf,xmax=Inf,ymin=0,fill=NA,color=NA,inherit.aes=FALSE) +
+    geom_rect() +
+    geom_hline(yintercept=0,color='black',linewidth=0.5) +
+    geom_vline(xintercept=x_rng[1],color='black',linewidth=0.5) +
+    theme(plot.background = element_rect(fill="white",color=NA),
+          panel.background = element_blank(),
+          panel.border = element_blank(),
+          panel.grid = element_blank(),
+          panel.spacing.y = unit(0,"lines"),
+          strip.text.y.right = element_text(angle=0),
+          strip.background = element_blank(),
+          legend.position = "none")
+  
+  p_gn <- plot_gene_track(gr_window,gene_cache_file = gn_tsv) + 
+    theme(legend.position = 'none',
+          panel.grid = element_blank())
+  
+  cowplot::plot_grid(p_gn,p,ncol=1,align="v",axis='lr',rel_heights=c(1,10))
+}
+```
+```{r results='asis',echo=FALSE}
+gn_lst <- c("CCND1","BCL2","MMP9","MMP2","BRD4","TP63","VEGFA","CEACAM5") %>% sort
+
+lapply(gn_lst,function(gn_nm){
+  p_file <- file.path(paste0("region_",gn_nm,".png"))
+  if(!file.exists(p_file)){
+    gr_wind <- gr_gns[gr_gns$gene_name == gn_nm] %>%
+      promoters %>%
+      resize(width=50000,fix='center')
+    p <- plot_region(gr_wind)
+    ggsave(p_file,p,"png",dpi=300,height=5,width=12,units='in')
+  }
+  cat("\n##",gn_nm,"\n\n")
+  cat("![](",p_file,")\n")
+}) %>% invisible
+```

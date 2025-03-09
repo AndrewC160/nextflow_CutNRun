@@ -1,0 +1,853 @@
+---
+title: "Cut&Run summary"
+author: "Andrew Clugston"
+date: "2/11/2022"
+output: html_document
+params:
+  base_directory: "/N/u/aclugston/projects/cut_and_run/output/OS526_cMYC_NONE_1"
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(GenomicRanges)
+library(data.table)
+library(knitr)
+library(kableExtra)
+library(scales)
+library(magrittr)
+library(Rsamtools)
+library(regioneR)
+library(cowplot)
+
+source("/N/u/aclugston/src/R/asclab_functions.R")
+
+knitr::opts_chunk$set(echo = FALSE,message=FALSE,fig.width = 5,fig.height = 4,fig.align = "center")
+
+#Aliases.
+mutate  <- dplyr::mutate
+select  <- dplyr::select
+arrange <- dplyr::arrange
+rename  <- dplyr::rename
+reduce  <- GenomicRanges::reduce
+
+base_dir  <- params$base_directory
+#base_dir <- "/N/u/aclugston/projects/cut_and_run/output/OS526_cMYC_NONE_1"
+samp_name <- basename(base_dir)
+dirs  <- list(base = base_dir,
+```
+
+```{r setup, include=FALSE}
+alignment = file.path(base_dir,"align"),
+              trimming  = file.path(base_dir,"trim"),
+              broadPeaks= file.path(base_dir,"broadPeaks"),
+              narrowPeaks=file.path(base_dir,"narrowPeaks"),
+              summits = file.path(base_dir,"summits"),
+              centrimo =  file.path(base_dir,"centrimo"),
+              fimo =      file.path(base_dir,"fimo"),
+              seqs =      file.path(base_dir,"seqs"),
+              streme =    file.path(base_dir,"streme"),
+              logs =      file.path(base_dir,"logs"),
+              figs =      file.path(base_dir,"figs"),
+              sea =       file.path(base_dir,"sea"))
+dir.create(dirs$figs,showWarnings = FALSE)
+bedtools_exe  <- "/N/u/aclugston/src/bedtools2/bin/bedtools"
+samtools_exe  <- "/asclab/projects/shared/modules/samtools/samtools-1.2/bin/el7/samtools"
+```
+
+```{r funcGeneral}
+count_lines   <- function(file_name,is_gzipped){
+  if(missing(is_gzipped)){
+    is_gzipped<- summary(file(file_name))$class == "gzfile"
+  }
+  cat_func  <- ifelse(is_gzipped,"zcat","cat")
+  system(paste(cat_func,file_name,"| wc -l"),intern = TRUE) %>% 
+    as.integer %>%
+    return()
+}
+
+```
+
+# `r samp_name`
+
+## Alignment stats
+
+```{r }
+alg_hg38_file   <- file.path(dirs$alignment,"hg38_alignment.txt")
+alg_sac3_file   <- file.path(dirs$alignment,"sac3_alignment.txt")
+
+read_alignment_file   <- function(file_in=alg_hg38_file){
+  txt <- scan(file_in,what=character(),sep="\n")
+  total_reads   <- str_extract(txt[1],"^[:digit:]+") %>% as.integer
+  pct_alignment <- str_extract(txt[length(txt)],"^[[:digit:]\\.]+") %>% as.double
+  
+  return(tibble(total_reads=total_reads,pct_alignment=pct_alignment))
+}
+
+rbind(mutate(read_alignment_file(alg_hg38_file),org="hg38"),
+      mutate(read_alignment_file(alg_sac3_file),org="sac3")) %>%
+  mutate(aligned_reads = total_reads * (pct_alignment/100)) %>%
+  select(org,total_reads,pct_alignment,aligned_reads) %>%
+  mutate_at(c("total_reads","aligned_reads"),comma) %>%
+  mutate(pct_alignment = paste0(pct_alignment,"%")) %>%
+  kable %>%
+  kable_styling(full_width=FALSE)
+```
+
+## Peaks and summits
+
+```{r funcPeaks}
+read_narrowPeak <- function(file_in = Sys.glob(file.path(dirs$narrowPeaks,"*.narrowPeak"))){
+  fread(file_in,sep="\t",col.names=c("seqnames","start","end","name","score","strand","summit_fc","nlog10p_summit","nlog10q_summit","summit_pos")) %>%
+    makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+}
+read_broadPeak  <- function(file_in = Sys.glob(file.path(dirs$broadPeaks,"*.broadPeak"))){
+  fread(file_in,sep="\t",col.names=c("seqnames","start","end","name","score","strand","mean_fc","nlog10p_mean","nlog10q_mean")) %>%
+    makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+}
+read_summitFile <- function(file_in){
+  fread(file_in,sep="\t",col.names=c("seqnames","start","end","name","score")) %>%
+    makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+}
+```
+
+```{r }
+peak_grs  <- list(broad= Sys.glob(file.path(dirs$broadPeaks,"*.broadPeak")) %>% read_broadPeak,
+                  narrow=Sys.glob(file.path(dirs$narrowPeaks,"*.narrowPeak")) %>% read_narrowPeak,
+                  summit=Sys.glob(file.path(dirs$summits,"*summit_regions.bed")) %>% read_summitFile)
+```
+
+```{r plotPeakTally}
+bp_theme  <- 
+  theme(panel.background = element_blank(),
+        panel.border = element_rect(size=0.5,color="black",fill=NA),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(size=0.25,color="gray"),
+        axis.text.x = element_text(angle=45,hjust=1,vjust=1),
+        axis.title.x = element_blank())
+
+#Count
+tb_p <- sapply(peak_grs,length) %>% enframe
+p_count <- 
+  ggplot(tb_p,aes(x=name,y=value,label=prettyNum(value,big.mark=","))) +
+    scale_y_continuous(name = "Count",labels=comma,expand=expansion(mult=c(0,0.1))) +
+    scale_x_discrete(labels = prettyTitle) +
+    geom_bar(stat="identity",position="dodge",fill="gray",color="black",size=0.25) +
+    geom_text(vjust=0) +
+    bp_theme
+
+#Scores.
+tb_p  <- lapply(names(peak_grs), function(nm){
+  peak_grs[[nm]] %>%
+    as_tibble %>%
+    select(score) %>%
+    mutate(regions = nm)
+}) %>%
+  do.call(rbind,.)
+
+p_qval   <- 
+  ggplot(tb_p,aes(x=regions,y=score)) +
+    scale_x_discrete(labels = prettyTitle) +
+    scale_y_log10(name="-log10(q-value)",labels=comma) +
+    geom_violin(fill="gray",color="black",size=0.25,draw_quantiles =0.5) +
+    geom_hline(yintercept = -log10(0.05),color="red",size=0.5,alpha=0.5) +
+    annotate(geom="text",x=0.5,y=-log10(0.05),hjust=0,vjust=0.5,label="Q-val 0.05\n",color="red",alpha=0.5) +
+    bp_theme
+
+#Widths.
+tb_p  <- lapply(names(peak_grs), function(nm){
+  peak_grs[[nm]] %>%
+    as_tibble %>%
+    select(width) %>%
+    mutate(regions = nm)
+}) %>%
+  do.call(rbind,.)
+
+p_width   <- 
+  ggplot(tb_p,aes(x=regions,y=width)) +
+    scale_x_discrete(labels = prettyTitle) +
+    scale_y_log10(name="Width (bp)",labels=comma) +
+    geom_violin(fill="gray",color="black",size=0.25,draw_quantiles =0.5) +
+    bp_theme
+
+cowplot::plot_grid(align = "v",axis = "lr",ncol=1,rel_heights = c(1,1,1.3),
+  p_count + theme(axis.text.x = element_blank(),
+                  axis.ticks.x = element_blank(),
+                  plot.margin = unit(c(0,0,0,0),"lines")),
+  p_qval  + theme(axis.text.x = element_blank(),
+                  axis.ticks.x = element_blank(),
+                  plot.margin = unit(c(0,0,0,0),"lines")),
+  p_width + theme(plot.margin = unit(c(0,0,0,0),"lines")))
+ggsave(filename = file.path(dirs$figs,paste0(samp_name,"_peaks_summary_plot.png")),
+       device = "png",units = "in",dpi=300,height = 5,width = 3)
+```
+
+## Summit cut matrix {.tabset}
+
+### Any score
+
+```{r funcCutMatrix}
+cut_matrix_plot   <- function(cut_bed="/N/u/aclugston/projects/cut_and_run/output/cMyc_OS152_None_1_CG23/summits/cMyc_OS152_None_1_CG23_insertions.bed",
+                              region_bed="/N/u/aclugston/projects/cut_and_run/output/cMyc_OS152_None_1_CG23/summits/cMyc_OS152_None_1_CG23_summit_regions.bed",
+                              bin_num = 101,max_regions = 10000,min_score=50){
+  reg_gr  <- fread(region_bed,sep="\t",header = FALSE,col.names = c("seqnames","start","end","name","score")) %>% filter(score >= min_score) %>% makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+  if(length(reg_gr) > max_regions){
+    reg_gr<- reg_gr[order(reg_gr$score,decreasing = TRUE)][c(1:max_regions)]
+  }
+  names(reg_gr) <- reg_gr$name
+  win_width <- width(reg_gr)[1]
+  bin_width <- 
+  cut_gr  <- fread(cut_bed,sep="\t",header =FALSE,col.names = c("seqnames","start","end","name","score","strand")) %>% makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+  tile_gr <- tile(reg_gr,n = bin_num) %>% unlist
+  tile_gr$region  <- str_extract(names(tile_gr),"^[^\\.]+")
+  tile_gr$bin     <- c(1:bin_num)
+  names(tile_gr)  <- NULL
+  tile_gr$pos_cuts<- countOverlaps(tile_gr,cut_gr[strand(cut_gr) == "+"])
+  tile_gr$neg_cuts<- countOverlaps(tile_gr,cut_gr[strand(cut_gr) == "-"])
+  tile_tb <- tile_gr %>%
+    as_tibble %>%
+    mutate(tot_cuts = pos_cuts + neg_cuts) %>%
+    group_by(region) %>%
+    mutate(reg_center = (min(start) + max(end)) / 2,
+           bin_pos = as.integer((start + end)/2 - reg_center),
+           row_score = tot_cuts / sum(tot_cuts)) %>%
+    ungroup
+  
+  score_order <- tile_tb %>%
+    group_by(region) %>%
+    summarize(total_score = sum(tot_cuts),
+              .groups="drop") %>%
+    arrange(total_score) %>%
+    select(region) %>%
+    unlist(use.names=FALSE)
+  
+  tile_tb   <- tile_tb %>%
+    mutate(region = factor(region,levels=score_order)) %>%
+    arrange(region,bin)
+  
+  #Heatmap.
+  y_lab <- paste0("Regions (n =",prettyNum(length(reg_gr),big.mark = ","),")")
+  x_lab <- paste0("Dist. from center")
+  p_h   <- ggplot(tile_tb,aes(x=bin_pos,y=region,fill=log(1+tot_cuts))) +
+    scale_x_continuous(name = x_lab,expand = c(0,0),
+                       labels = function(x) 
+                         ifelse(x > 0,
+                                paste0("+",x,"bp"),
+                                paste0(x,"bp"))) +
+    scale_y_discrete(name = y_lab,expand = c(0,0)) +
+    scale_fill_gradient(name = "log(1+cuts)",low = "black",high="cyan") +
+    geom_tile(color=NA) +
+    theme(panel.background = element_rect(fill="black"),
+          panel.border = element_rect(size=0.5,color="black",fill=NA),
+          plot.margin = unit(c(0.1,0.1,0,0.1),"line"),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.title.x = element_blank(),
+          axis.text.x = element_blank(),
+          axis.ticks.x = element_blank())
+  
+  #Lines.
+  tb_line <- tile_tb %>%
+    group_by(bin,bin_pos) %>%
+    summarize(neg_cuts = sum(neg_cuts),
+              pos_cuts = sum(pos_cuts),
+              .groups="drop") %>%
+    pivot_longer(cols = c(neg_cuts,pos_cuts),
+                 names_to = "strand",values_to = "cuts") %>%
+    mutate(strand = ifelse(strand == "neg_cuts","+","-") %>% factor(levels=c("+","-")))
+  p_l <- ggplot(tb_line,aes(x=bin_pos,y=cuts,color=strand)) +
+    scale_x_continuous(name = x_lab,expand = c(0,0),
+                       labels = function(x) 
+                         ifelse(x > 0,
+                                paste0("+",x,"bp"),
+                                paste0(x,"bp"))) +
+    scale_y_continuous(name = "Insertions",expand=expansion(mult=c(0,0.1)),labels=comma) +
+    scale_color_manual(values=c(`+`="red",`-`="blue")) +
+    geom_line() +
+    theme(panel.background = element_blank(),
+          panel.border = element_rect(size=0.5,color="black",fill=NA),
+          plot.margin = unit(c(0,0.1,0.1,0.1),"line"),
+          legend.key = element_rect(fill=NA),
+          legend.text = element_text(size=15),
+          legend.title = element_blank(),
+          axis.text.x = element_text(size=8,angle=45,hjust=1,vjust=1))
+  return(
+    list(plot=cowplot::plot_grid(p_h,p_l,align = "v",ncol = 1,axis = "lr",rel_heights = c(2,1)),
+         line_table = tb_line))
+}
+```
+
+```{r fig.height=7,fig.width=4}
+p_lst   <- cut_matrix_plot(cut_bed = file.path(dirs$summits,paste0(samp_name,"_insertions.bed")),
+                           region_bed = file.path(dirs$summits,paste0(samp_name,"_summit_regions.bed")),
+                           bin_num = 101,max_regions = 10000,min_score = 00)
+plot(p_lst$plot)
+ggsave(p_lst$plot,
+       filename = file.path(dirs$figs,paste0(samp_name,"_cut_matrix_plot.png")),
+       device = "png",units = "in",dpi=300,height = 5,width = 3)
+write.table(p_lst$line_table,file.path(dirs$figs,paste0(samp_name,"_cut_matrix_profile.tsv")),
+            sep="\t",row.names=FALSE,col.names=TRUE,quote = FALSE)
+```
+
+### Score \> 10
+
+```{r fig.height=7,fig.width=4}
+p_lst   <- cut_matrix_plot(
+  cut_bed = file.path(dirs$summits,paste0(samp_name,"_insertions.bed")),
+  region_bed = file.path(dirs$summits,paste0(samp_name,"_summit_regions.bed")),
+  bin_num = 101,max_regions = 10000,min_score = 10)
+plot(p_lst$plot)
+ggsave(p_lst$plot,
+       filename = file.path(dirs$figs,paste0(samp_name,"_cut_matrix_plot_score10plus.png")),
+       device = "png",units = "in",dpi=300,height = 5,width = 3)
+write.table(p_lst$line_table,file.path(dirs$figs,paste0(samp_name,"_cut_matrix_profile_score10plus.tsv")),
+            sep="\t",row.names=FALSE,col.names=TRUE,quote = FALSE)
+```
+
+## Peak enrichment {.tabset}
+
+### Enrichment
+
+Peaks are overlapped with genomic features, then randomized 5 times and the process is repeated. Peaks are "enriched" over a feature type if they occur more frequently than is expected by chance, i.e. real peaks fall on a genomic feature type more often than they do after randomization. For instance, a peak set will be enriched for enhancers if 100 peaks overlap known enhancers, but after randomization only an average of 27.3 peaks overlap an enhancer. In these heat maps, the first number indicates real overlaps, while the second number indicates randomized overlaps on average. The fill color of a given tile is tied to enrichment, and to compensate for very low values (an enrichment of 1 real and 0 random is infinite), I attached the 'alpha' aesthetic to the total number of peaks involved (features with 2 or three peaks total probably shouldn't be heavily weighted).
+
+```{r peakData}
+fl_nar_peak <- Sys.glob(file.path(dirs$narrowPeaks,"*.narrowPeak"))
+names(fl_nar_peak)  <- basename(fl_nar_peak)
+fl_brd_peak <- Sys.glob(file.path(dirs$broadPeaks,"*.broadPeak"))
+names(fl_brd_peak)  <- basename(fl_brd_peak)
+fl_sum_peak <- Sys.glob(file.path(dirs$summits,"*regions.bed"))
+names(fl_sum_peak) <- basename(fl_sum_peak)
+
+grs_nar   <- lapply(fl_nar_peak, function(x) {
+  fread(x,col.names=c("seqnames","start","end","name","score","strand","fc_summit","negLog10P_summit","negLog10Q_summit","pos_summit")) %>%
+    as_tibble %>%
+    mutate(name = paste0("np_",row_number()),
+           seqnames = factor(seqnames,levels=paste0("chr",c(1:22,"X","Y")))) %>%
+    filter(!is.na(seqnames)) %>%
+    makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+})
+grs_sum   <- lapply(fl_sum_peak,function(x) {
+  fread(x,col.names=c("seqnames","start","end","name","score")) %>%
+    as_tibble %>%
+    mutate(name = paste0("sum_",row_number()),
+           seqnames = factor(seqnames,levels=paste0("chr",c(1:22,"X","Y")))) %>%
+    filter(!is.na(seqnames)) %>%
+    makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+})
+
+grs_brd   <- lapply(fl_brd_peak, function(x) {
+  fread(x,col.names=c("seqnames","start","end","name","score","strand","fc_peak","negLog10P_peak","negLog10Q_peak")) %>%
+    as_tibble %>%
+    mutate(name = paste0("sum_",row_number()),
+           seqnames = factor(seqnames,levels=paste0("chr",c(1:22,"X","Y")))) %>%
+    filter(!is.na(seqnames)) %>%
+    makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+})
+
+```
+
+```{r genomeAnnotations}
+enhs_gr   <- get_enhancers() %>% makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+enhs_os   <- enhs_gr[enhs_gr$usg_os_143B > 0 | enhs_gr$usg_os_HS706 > 0 | enhs_gr$usg_os_HSOs1 > 0]
+feats     <- fread("/N/u/aclugston/resources/genomes/hg38/Homo_sapiens.GRCh38.104.chr.tabix.gtf.gz",
+                   col.names = c("seqnames","source","type","start","end","name","strand","score","details")) %>%
+              filter(seqnames != "chrM")
+gene_gr   <- feats %>% filter(type == "gene") %>% makeGRangesFromDataFrame() %>% reduce
+seqlevelsStyle(gene_gr) <- "UCSC"
+exon_gr   <- feats %>% filter(type == "exon") %>% makeGRangesFromDataFrame() %>% reduce
+seqlevelsStyle(exon_gr) <- "UCSC"
+intr_gr   <- GenomicRanges::setdiff(gene_gr,exon_gr,ignore.strand=FALSE)
+prom_gr   <- promoters(gene_gr)
+
+gene_regs <- c(gene_gr,prom_gr) 
+strand(gene_regs)  <- "*"
+enh_regs  <- enhs_gr
+strand(enh_regs)  <- "*"
+sub_regs  <- c(gene_regs,enh_regs)
+sub_regs  <- reduce(sub_regs)
+
+seqs_sizes  <- file.path("/N/u/aclugston/resources/genomes/hg38/hg38_seqsizes.csv") %>%
+  read.table(sep=",",col.names=c("seqnames","bp")) %>%
+  as_tibble %>%
+  mutate(seqnames=paste0("chr",seqnames),
+         end = gsub(",","",bp) %>% as.integer,
+         start = 0) %>%
+  vectify(end,seqnames)
+strand(sub_regs)  <- "*"
+igen_regs <- GenomicRanges::gaps(sub_regs,start = 1,end = seqs_sizes) %>% reduce
+igen_regs <- igen_regs[strand(igen_regs) == "*"]
+annot_gr_list <- 
+  list(promoters=prom_gr,
+       exons = exon_gr,
+       enhancers = enhs_gr,
+       enhancers_os = enhs_os,
+       introns=intr_gr,
+       intragenic=igen_regs)
+annot_list  <- list(genes=gene_gr,exons=exon_gr,introns=intr_gr,promoters=prom_gr,enhancers=enhs_gr,`non-intergenic`=sub_regs,intergenic=igen_regs[strand(igen_regs) == "*"])
+```
+
+```{r funcPeakEnrichment}
+randomize_grange  <- function(gr_in = grs_nar[[1]],max_sample=10000,sample_num=3,gen_seq_sizes=seqs_sizes){
+  max_sample <- min(length(gr_in),max_sample)
+  gen_sizes   <- data.frame(seqnames=names(gen_seq_sizes),1,gen_seq_sizes) %>% filter(seqnames != "chrM")
+  sapply(1:sample_num, function(i) {
+    gr <- randomizeRegions(sample(gr_in,size=max_sample,replace=FALSE),genome = gen_sizes,allow.overlaps = TRUE)
+    gr$set = paste0("rand_",i)
+    return(gr)
+  }) %>%
+    do.call(c,.) %>%
+    return()
+}
+region_enrichment   <- function(peak_regions_gr=grs_nar[[1]],annot_grs=annot_gr_list,rand_count = 5,max_sample = 10000,simplify_output=TRUE){
+  peak_regions_gr$set <- "real"
+  rand_peak_regions_gr<- randomize_grange(peak_regions_gr,max_sample = max_sample,sample_num = rand_count)
+  peak_gr   <- c(peak_regions_gr[,"set"],rand_peak_regions_gr)
+  
+  feat_gr   <- lapply(names(annot_grs), function(nm) {
+    gr <- annot_grs[[nm]][,NULL]
+    gr$feature  <- nm
+    return(gr)
+  }) %>%
+    do.call(c,.)
+  
+  olaps   <- findOverlaps(peak_gr,feat_gr)
+  
+  peak_gr$feature <- "none"
+  peak_gr$feature[queryHits(olaps)] <- feat_gr$feature[subjectHits(olaps)]
+  tb_out  <- peak_gr %>%
+    as_tibble %>%
+    mutate(feature = factor(feature,levels=c("none",names(annot_grs)))) %>%
+    group_by(set,feature) %>%
+    tally %>%
+    complete(feature,fill = list(n=0)) %>%
+    ungroup %>%
+    mutate(class = str_extract(set,"^[:alpha:]+") %>% factor(levels=c("real","rand")),
+          feature = factor(feature,levels=c("none",names(annot_grs)))) %>%
+    arrange(set,feature) %>%
+    group_by(set) %>%
+    mutate(frac = n / sum(n)) %>%
+    ungroup
+  
+  if(simplify_output){
+    tb_out  <- tb_out %>%
+      group_by(feature,class) %>%
+      summarize(n = mean(n),
+                sample = n(),.groups="drop") %>%
+      pivot_wider(id_cols = feature,
+                  names_from = class,
+                  values_from = c(n,sample)) %>%
+      mutate(enrichment = n_real / n_rand)
+  }
+  return(tb_out)
+}
+```
+
+```{r plotPeakEnrichment,fig.width=10,fig.height=3}
+peak_set  <- c(grs_nar,grs_sum,grs_brd)
+nar_tb    <- lapply(names(peak_set), function(nm) {
+  region_enrichment(peak_regions_gr = peak_set[[nm]]) %>%
+    mutate(file =nm) %>%
+    return()
+}) %>%
+  do.call(rbind,.) %>%
+  mutate(log2_enrichment = log2(enrichment))
+
+color_scale <- nar_tb %>%
+  filter(is.finite(log2_enrichment) & !is.na(log2_enrichment)) %>%
+  summarize(min = min(0,min(floor(log2_enrichment))),
+            max = max(0,max(ceiling(log2_enrichment)))) %>%
+  unlist
+
+nar_tb <- nar_tb %>%
+  mutate(log2_enrichment = case_when(is.infinite(log2_enrichment) & log2_enrichment > 0 ~ color_scale['max'],
+                                     is.infinite(log2_enrichment) & log2_enrichment < 0 ~ color_scale['min'],
+                                     is.na(log2_enrichment) ~ 0,
+                                     TRUE ~ log2_enrichment),
+         labels = paste0(as.integer(n_real),"/",round(n_rand,digits=1))) %T>%
+  write.table(file = file.path(dirs$figs,paste0(samp_name,"_table_peak_enrichment.tsv")),
+              sep="\t",row.names = FALSE,quote = FALSE)
+
+peak_counts <- sapply(peak_set,length)  
+ggplot(nar_tb,aes(x=feature,y=file,fill=log2_enrichment,color=log2_enrichment,alpha = n_real + n_rand,label = labels)) +
+  scale_x_discrete(expand=c(0,0)) +
+  scale_y_discrete(expand=c(0,0),labels=function(x) paste0(x," (n=",prettyNum(peak_counts[x],big.mark=","),")")) +
+  scale_fill_gradient2(name = "log2(real/random)",low = "blue",high="red",
+                       breaks = c(color_scale['min'],0,color_scale['max']),
+                       limits = color_scale,
+                       labels = function(x) case_when(x == color_scale['max'] ~ paste0("\u2265",color_scale['max']),
+                                                      x == color_scale['min'] ~ paste0("\u2264",color_scale['min']),
+                                                      TRUE ~ as.character(x))) +
+  scale_alpha_continuous(name = "Real + Random peaks") +
+  geom_tile(color=NA) +
+  geom_text(color='black',alpha=1) +
+  theme(panel.border = element_rect(size=0.5,color="black",fill=NA),
+        panel.background = element_blank(),
+        axis.text.x = element_text(angle=45,hjust=1,vjust=1),
+        axis.title = element_blank(),
+        legend.position = "bottom")
+ggsave(file.path(dirs$figs,paste0(samp_name,"_peak_enrichment.png")),dpi = 300,units = "in",height = 3,width = 10)
+```
+
+### Genomic regions.
+
+Genomic regions are divided into genes, exons, introns, promoters, enhancers, OS enhancers, and intergenic reigons. Enhancers are annotated from the [FANTOM5](https://fantom.gsc.riken.jp/5/) database, and "OS enhancers" are enhancers with annotated activity in OS 143B cells, OS HS706 cells, or OS HSOS1 cells (according to FANTOM5). The entire genome is encompassed, but some features may overlap more than one feature type (for instance, a region containing an enhancer within an intron will be counted as both an enhancer and an intron). Intergenic regions are simply the regions between all other genomic annotations.
+
+```{r plotExampleRegion,fig.height=4,fig.width=6}
+#rand_region   <-   gene_gr[sample(c(1:length(gene_gr)),size = 1)]
+#rand_region   <- resize(rand_region,width = 4 * width(rand_region),fix="center")
+rand_region <- GRanges("chr14",IRanges(68864714,68873093))
+preview_granges(list_grs = annot_list,window_coords = resize(rand_region,width=100000,fix="center"))
+```
+
+```{r tallyRegions}
+lapply(names(annot_list), function(nm) {
+  annot_list[[nm]] %>%
+  reduce %>%
+  as_tibble %>% 
+  summarize(width=sum(width),.groups="drop") %>%
+  mutate(feature=nm)
+}) %>%
+  do.call(rbind,.) %>%
+  filter(!feature %in% c("genes","non-intergenic")) %>%
+  mutate(width=width/1e6,
+         frac = percent(width/sum(width))) %>%
+  select(feature,width,frac) %>%
+  arrange(desc(width)) %>%
+  mutate(width = paste0(prettyNum(width,big.mark=",",digits=1)," MB"),
+         frac = paste0("(",frac,")")) %>%
+  kable %>%
+  kable_styling(full_width=FALSE)
+```
+
+## Motif enrichment {.tabset}
+
+### SEA {.tabset}
+
+The Simple Enrichment Analysis ([SEA](https://meme-suite.org/meme/tools/sea)) tool looks for motifs in a given motif file within a set of sequences, and compares the rate at which those motifs occur to the rate at which they occur in randomized sequences of the same length. The following bar plots illustrate the top 20 significant hits for each peak set, and labels on each bar display the true number of motif occurrences / number of occurrences in randomized sequences. *NOTE:* I have removed zinc fingers as these appear to dominate most of our hits in our samples.
+
+```{r funcSeaResults}
+read_sea_tsv  <- function(tsv_in = sea_files[3]){
+  fread(cmd=paste('grep -v "^#"',tsv_in),sep="\t",header=TRUE) %>% 
+    as_tibble %>%
+    rename_all(tolower) %>%
+    rename(tp_pct=`tp%`,
+           fp_pct=`fp%`) %>%
+    mutate(base_id = str_extract(id,"^[^_]+")) %>%
+    select(rank,base_id,qvalue,log_qvalue,tp,tp_pct,fp,fp_pct,id,everything())
+}
+plot_sea_res  <- function(sea_tibble=sea_res[[1]],top_motifs=20){
+  tb_p  <- sea_tibble %>%
+    mutate(nlog_qvalue=-log_qvalue) %>%
+    top_n(top_motifs,nlog_qvalue) %>%
+    arrange(nlog_qvalue) %>%
+    mutate(id = factor(id,levels=select(.,id) %>% unlist %>% unique)) %>%
+    mutate(label = paste0(tp,"/",fp," "))
+  id_labs   <- vectify(tb_p,base_id,id)
+  ggplot(tb_p,aes(x=-log_qvalue,y=id,label=label)) +
+    scale_x_continuous(name = "-log(Qvalue)",expand=expansion(mult=c(0,0.1))) +
+    scale_y_discrete(labels = id_labs) +
+    geom_bar(stat="identity",color="black",size=0.25,fill="lightgray") +
+    geom_text(hjust=1) +
+    theme_minimal() +
+    theme(axis.title.y = element_blank(),
+          panel.grid.major.y = element_blank())
+}
+```
+
+```{r loadSeaResults}
+sea_files   <- Sys.glob(file.path(dirs$sea,"*/sea.tsv")) %>% setNames(.,basename(dirname(.)))
+sea_res <- lapply(sea_files,read_sea_tsv)
+```
+
+#### BroadPeaks
+
+```{r plotSeaBP,fig.height=6,fig.width=10}
+sea_res$broadPeaks %>%
+  filter(!grepl("^ZN",base_id)) %>%
+  filter(!grepl("^ZFP",base_id)) %>%
+  plot_sea_res
+```
+
+#### NarrowPeaks
+
+```{r plotSeaNP,fig.height=6,fig.width=10}
+sea_res$narrowPeaks %>%
+  filter(!grepl("^ZN",base_id)) %>%
+  filter(!grepl("^ZFP",base_id)) %>%
+  plot_sea_res
+```
+
+#### Summits
+
+```{r plotSeaSum,fig.height=6,fig.width=10}
+sea_res$summits %>%
+  filter(!grepl("^ZN",base_id)) %>%
+  filter(!grepl("^ZFP",base_id)) %>%
+  plot_sea_res
+```
+
+### FIMO {.tabset}
+
+Find Individual Motif Occurrence ([FIMO](https://meme-suite.org/meme/doc/fimo.html)) scans sequences and looks for instances of a given motif, reporting where they are found. For this analysis I include all motifs in the HOCOMOCOv11 Human Core set, but for this report I filter out all zincfingers as these are extremely common, perhaps based on their short sequences. We may want to look into these, however.
+
+```{r funcFIMOResults}
+read_fimo_tsv   <- function(tsv_in = fimo_files[1]){
+  fread(cmd = paste('grep -v "^#" ',tsv_in)) %>%
+    as_tibble %>%
+    rename(pval=`p-value`,qval=`q-value`) %>%
+    mutate(base_id = str_extract(motif_id,"^[^_]+") %>% factor,
+           seqnames = str_extract(sequence_name,"chr[^:]{1,2}") %>% factor(levels=paste0("chr",c(1:22,"X","Y"))),
+           seq_start = str_match(sequence_name,"chr[^:]{1,2}:([:digit:]+)")[,2] %>% as.double,
+           start = seq_start + start,
+           end = seq_start + stop) %>%
+    filter(!is.na(seqnames)) %>%
+    select(base_id,seqnames,start,end,score,qval,pval) %>%
+    mutate(peak_set = basename(dirname(tsv_in)))
+}
+```
+
+#### FIMO tally
+
+FIMO identifies motif occurrences throughout the regions specified, and here I tally how many occurrences of each motif type are found. I only plot the top 20 of these, and I filter out zinc fingers as these are extremely common.
+
+```{r dataFIMO}
+tb_fimo  <- Sys.glob(file.path(dirs$fimo,"*/fimo.tsv")) %>% lapply(read_fimo_tsv) %>% do.call(rbind,.)
+
+fimo_tally  <- tb_fimo %>% 
+  group_by(peak_set,base_id) %>% 
+  tally %>%
+  ungroup %>%
+  arrange(desc(n))
+
+keep_mtfs   <- fimo_tally %>%
+  #Remove zinc fingers.
+  filter(!grepl("^ZN",base_id)) %>% 
+  filter(!grepl("^ZFP",base_id)) %>%
+  group_by(base_id) %>%
+  summarize(total = sum(n),.groups="drop") %>%
+  top_n(n=20,wt=total) %>%
+  arrange(desc(total)) %>%
+  select(base_id) %>% unlist %>% as.character
+
+fimo_tally  <- fimo_tally %>%
+  mutate(base_id = factor(base_id,levels=keep_mtfs)) %>%
+  filter(!is.na(base_id))
+```
+
+```{r plotFIMOTally,fig.height=4, fig.width=8}
+ggplot(fimo_tally,aes(x=base_id,y=n,fill=peak_set)) +
+  scale_y_continuous(name = "Count",expand=expansion(mult=c(0,0.1)),
+                     labels = comma) +
+  geom_bar(stat="identity",position=position_dodge(width=0.75),color="black",size=0.25) +
+  theme(panel.background = element_blank(),
+        panel.border = element_rect(size=0.5,fill=NA,color="black"),
+        panel.grid.major.y = element_line(size=0.25,color="gray"),
+        panel.grid.major.x = element_blank(),
+        legend.title = element_blank(),
+        axis.text.x = element_text(angle=45,hjust=1,vjust=1),
+        axis.title.x = element_blank())
+ggsave(filename = file.path(dirs$figs,paste0(samp_name,"_FIMO_tally_barplot.png")),dpi=300,units = "in",height = 4,width = 7)
+```
+
+#### FIMO motif enrichment
+
+Since FIMO reports motifs that can be translated directly into a genomic location, I performed the same enrichment analysis as above using these motifs as an input. It should be noted, however, that while these enrichment values reflect the distribution of these motifs throughout the sequences we identify, the same results may result if we considered all motif occurrences throughout the genome.
+
+```{r plotFIMOEnrichment,fig.width=10,fig.height=8}
+enrich_tbl  <- tb_fimo %>% 
+  filter(base_id %in% keep_mtfs) %>%
+  group_split(base_id) %>%
+  lapply(function(x) {
+    gr <- makeGRangesFromDataFrame(x,keep.extra.columns = TRUE)
+    nm <- as.character(x$base_id)[1]
+    region_enrichment(gr,rand_count = 3) %>%
+      mutate(name = nm)
+  }) %>%
+  do.call(rbind,.)%>%
+  mutate(log2_enrichment = log2(enrichment))
+color_scale <- enrich_tbl %>%
+  filter(is.finite(log2_enrichment) & !is.na(log2_enrichment)) %>%
+  summarize(min = min(0,min(floor(log2_enrichment))),
+            max = max(0,max(ceiling(log2_enrichment)))) %>%
+  unlist
+
+e_tbl <- enrich_tbl %>%
+  arrange(name) %>%
+  mutate(name=factor(name),
+         log2_enrichment = case_when(is.infinite(log2_enrichment) & log2_enrichment > 0 ~ color_scale['max'],
+                                     is.infinite(log2_enrichment) & log2_enrichment < 0 ~ color_scale['min'],
+                                     is.na(log2_enrichment) ~ 0,
+                                     TRUE ~ log2_enrichment),
+         labels = paste0(prettyNum(as.integer(n_real),big.mark=","),"/",prettyNum(round(n_rand,digits=1),big.mark=","))) %T>%
+  write.table(file = file.path(dirs$figs,paste0(samp_name,"_FIMO_motif_enrichment.tsv")),
+              sep="\t",row.names = FALSE,quote = FALSE)
+
+n_totals  <- e_tbl %>%
+  group_by(name) %>%
+  summarize(total = sum(n_real)) %>%
+  vectify(total,name)
+ggplot(e_tbl,aes(x=feature,y=name,fill=log2_enrichment,color=log2_enrichment,alpha = log2(n_real + n_rand),label = labels)) +
+  scale_x_discrete(expand=c(0,0)) +
+  scale_y_discrete(expand=c(0,0),labels=function(x) paste0(x," (n=",prettyNum(n_totals[as.character(x)],big.mark=","),")")) +
+  scale_fill_gradient2(name="log2(Real / Random)",low = "blue",high="red",
+                       limits=color_scale,
+                       breaks = c(color_scale['min'],0,color_scale['max']),
+                       labels = function(x) case_when(x == color_scale['max'] ~ paste0("\u2265",color_scale['max']),
+                                                      x == color_scale['min'] ~ paste0("\u2264",color_scale['min']),
+                                                      TRUE ~ as.character(x))) +
+  scale_alpha_continuous(name = "log2(Real + Random)") +
+  geom_tile(color=NA) +
+  geom_text(color='black',alpha=1) +
+  theme(panel.border = element_rect(size=0.5,color="black",fill=NA),
+        panel.background = element_blank(),
+        axis.text.x = element_text(angle=45,hjust=1,vjust=1),
+        axis.title = element_blank(),
+        legend.position = "bottom")
+ggsave(file.path(dirs$figs,paste0(samp_name,"_FIMO_motif_enrichment.png")),dpi = 300,units = "in",height = 8,width = 10)
+```
+
+### STREME {.tabset}
+
+Sensitive, Thorough, Rapid, Enriched Motif ([STREME](https://meme-suite.org/meme/doc/streme.html)) looks for *de novo* motifs in a given set of sequences, and roughly characterizes where they fall in the provided sequences. These results can be subjected to [Tomtom](https://meme-suite.org/meme/tools/tomtom) in order to determine if these sequences are equivalent to any known factors. I have not automated this, however.
+
+```{r dataSTREME}
+read_streme_tsv   <- function(tsv_in="/N/u/aclugston/projects/cut_and_run/output/OS526_cMYC_NONE_1/streme/broadPeaks/sequences.tsv"){
+  paste("grep -v '^#'",tsv_in) %>%
+    fread(cmd=.,sep="\t") %>%
+    as_tibble %>%
+    rename_all(tolower) %>%
+    rename(pval=`motif_p-value`) %>%
+    mutate(idx = str_extract(motif_id,"^[:digit:]+") %>% as.integer,
+           motif = str_extract(motif_id,"[:alpha:]+$")) %>%
+    group_by(idx,motif) %>%
+    summarize(pval= mean(pval),
+              min_score=min(seq_score), max_score = max(seq_score),
+              count = n(),.groups="drop") %>%
+    arrange(idx)
+}
+streme_file <- Sys.glob(file.path(dirs$streme,"*/sequences.tsv"))
+streme_found<- !identical(streme_file,character(0))
+if(streme_found){
+  streme_tbs  <- streme_file %>%
+    setNames(.,sapply(.,function(x) basename(dirname(x)))) %>%
+    lapply(read_streme_tsv)
+}
+```
+
+#### narrowPeaks
+
+```{r }
+if(streme_found){
+  streme_tbs$narrowPeaks %>%
+    kable %>%
+    kable_styling(full_width=FALSE)
+}else{
+  print("No STREME results.")
+}
+```
+
+#### broadPeaks
+
+```{r }
+if(streme_found){
+  streme_tbs$broadPeaks %>%
+    kable %>%
+    kable_styling(full_width=FALSE)
+}else{
+  print("No STREME results.")
+}
+```
+
+#### Summits
+
+```{r }
+if(streme_found){
+  streme_tbs$summits %>%
+    kable %>%
+    kable_styling(full_width=FALSE)
+}else{
+  print("No STREME results.")
+}
+```
+
+### CentriMo
+
+[CentriMo](https://meme-suite.org/meme/tools/centrimo) accepts as input a set of *equal length* sequences (so in this case the summit peak sequence set) and determines if any sequences are found to be enriched in any particular position (for instance, does a given motif happen more often in the center of these sequences or towards the ends?).
+
+```{r funcCentriMo}
+read_centrimo_tsv <- function(tsv_in = "/N/u/aclugston/projects/cut_and_run/output/OS526_cMYC_NONE_1/centrimo/centrimo.tsv"){
+  paste("grep -v '#'",tsv_in) %>%
+    fread(cmd=.,sep="\t") %>%
+    as_tibble %>%
+    rename_all(tolower) %>%
+    rename(idx = db_index,
+           eval = `e-value`,
+           adj_pval = `adj_p-value`,
+           log_adj_pval = `log_adj_p-value`,
+           pval = `p-value`)
+}
+read_centrimo_bins  <- function(file_in = "/N/u/aclugston/projects/cut_and_run/output/OS526_cMYC_NONE_1/centrimo/site_counts.txt"){
+  txt <- scan(file_in,what=character(),sep="\n",quiet = TRUE) %>% trimws
+  header_lines  <- grep("^DB",txt)
+  tail_lines    <- c(header_lines - 1, length(txt)) %>% setdiff(0)
+  names(header_lines) <- txt[header_lines] %>% str_match("\t(.+)$") %>% .[,2]
+  names(tail_lines)   <- names(header_lines)
+  
+  lapply(names(header_lines), function(nm) {
+    st_line <- header_lines[nm] + 1
+    en_line <- tail_lines[nm]
+    fread(text=txt[st_line:en_line],sep="\t",col.names=c("bin","count")) %>%
+      as_tibble %>%
+      mutate(mark = nm)
+  }) %>%
+    do.call(rbind,.)
+}
+```
+
+```{r dataCentrMo}
+centrimo_file     <- paste0(file.path(dirs$centrimo,"centrimo.tsv"))
+centrimo_bin_file <- paste0(file.path(dirs$centrimo,"site_counts.txt"))
+```
+
+#### Table
+
+```{r tableCentriMo}
+if(file.exists(centrimo_file)){
+  t_tb  <- read_centrimo_tsv(centrimo_file) %>%
+    arrange(log_adj_pval)
+  t_tb %>%
+    select(idx,motif_id,consensus,adj_pval,total_sites) %>%
+    kable %>% 
+    kable_styling(full_width=FALSE)
+  
+}else{
+  print("No CentriMo result table found.")
+}
+```
+
+#### Plot
+
+```{r fig.height=4,fig.width=8}
+if(file.exists(centrimo_bin_file)){
+  top_mtfs  <- t_tb %>% top_n(10,wt=-log_adj_pval) %>% select(motif_id) %>% unlist %>% unique
+  p_tb <- read_centrimo_bins(centrimo_bin_file) %>%
+    filter(mark %in% top_mtfs) %>%
+    mutate(bin_start = bin - 0.5,
+           bin_end = bin + 0.5) %>%
+    select(-bin) %>%
+    pivot_longer(cols = -c("mark","count"),
+                 names_to = "position",
+                 values_to = "bin")
+  
+  ggplot(p_tb,aes(x=bin,y=count,color=mark)) + 
+    scale_x_continuous(expand=c(0,0)) +
+    scale_y_continuous(name = "Count") +
+    geom_line() +
+    theme(panel.background = element_blank(),
+          panel.border = element_rect(size=0.5,color="black",fill=NA),
+          panel.grid.major = element_line(size=0.25,color="lightgray"),
+          legend.title = element_blank())
+}else{
+  print("No CentriMo site count data found.")
+}
+```
