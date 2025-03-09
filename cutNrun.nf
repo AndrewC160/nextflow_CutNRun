@@ -4,15 +4,15 @@
  * Parameters.
  */
 // Inputs.
-params.sample_table = "/N/p/asclab/ASC-cutNrun/25FEB27-mromanmoreno/src/nextflow_cutNrun/test_dir/raw/file_table.csv"
+params.sample_table
+params.dir_out
 params.control_epitope = "IgG"
 
 // Directories.
 params.dir_modules = "${projectDir}/modules"
 params.dir_R = "${projectDir}/R"
-params.dir_resources = "/N/p/asclab/ASC-cutNrun/25FEB27-mromanmoreno/resources"
+params.dir_resources = "${projectDir}/resources"
 params.dir_bowtie = "${params.dir_resources}/bowtie2_indices"
-params.dir_out = "/N/p/asclab/ASC-cutNrun/25FEB27-mromanmoreno/src/nextflow_cutNrun/test_nf"
 params.dir_reps = "${params.dir_out}/replicates"
 params.dir_pool = "${params.dir_out}/pooled"
 
