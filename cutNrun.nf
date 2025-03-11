@@ -7,6 +7,8 @@
 params.sample_table
 params.dir_out
 params.control_epitope = "IgG"
+params.truncate_fastqs = true
+params.truncate_count = 100000
 
 // Directories.
 params.dir_modules = "${projectDir}/modules"
@@ -25,6 +27,7 @@ params.seqsizes = "${params.dir_bowtie}/hg38/hg38_seqsizes.tsv"
 params.motif_db = "${params.dir_resources}/motif_databases/HUMAN/HOCOMOCOv11_core_HUMAN_mono_meme_format.meme"
 
 // Modules.
+include { truncateFastQs } from "${params.dir_modules}/mod_truncateFastQs.nf"
 include { trimming } from "${params.dir_modules}/mod_trimming.nf"
 include { alignment as alignment_hg38 } from "${params.dir_modules}/mod_alignment.nf"
 include { alignment as alignment_sac3 } from "${params.dir_modules}/mod_alignment.nf"
@@ -50,11 +53,21 @@ workflow {
   // Read CSV.
   Channel.fromPath(params.sample_table)
     .splitCsv(header: true)
-    .map { row -> tuple(row.name,row.cell_line,row.epitope,row.cond,row.rep,file(row.R1),file(row.R2)) }
-    .set { chan_input }
+    .map { row -> tuple(row.proj,row.name,row.cell_line,row.epitope,row.cond,row.rep,file(row.R1),file(row.R2)) }
+    .set { ch_input }
+    
+  // Truncate FastQs (OPTIONAL)
+  // For use when running pipeline with stub dataset.
+  (ch_trunc,ch_full) = params.truncate_fastqs
+    ? [ch_input,Channel.empty()]
+    : [Channel.empty(), ch_input]
+  
+  truncateFastQs(ch_trunc,params.truncate_count)
+    .mix(ch_full)
+    .set { ch_fastqs }
   
   // Trimming.
-  trimming(chan_input)
+  trimming(ch_fastqs)
   
   // Alignment, hg38.
   bt_idx = file(params.bt2_hg38)
@@ -65,7 +78,7 @@ workflow {
   alignment_sac3(trimming.out.trimmed,bt_idx).aligned
   
   // Genome assignment.
-  ch_bams = alignment_hg38.out.aligned.join(alignment_sac3.out.aligned,by: 0..4)
+  ch_bams = alignment_hg38.out.aligned.join(alignment_sac3.out.aligned,by: 0..5)
   bamBest(ch_bams)
   
   // Filtering.
@@ -80,76 +93,79 @@ workflow {
   
   // FRiP scores
   readFiltering_hg38.out.filtered
-    .map { row -> tuple(row[0],row[5]) }
+    .map { row -> tuple(row[1],row[6]) }
     .join(
       peakCallingNarrow.out.narrowPeaks 
-        .map {row -> tuple(row[0],row[5]) } )
+        .map {row -> tuple(row[1],row[6]) } )
     .set { ch_frip_reps }
   calculateFRiP(ch_frip_reps,"narrowPeaks")
   
-  // Pooled peak calling.
-  // Split bams into treatment/control, re-join, and submit for pooled peak calling.
+  // Sample pooling.
+  //  Split bams into treatment/background.
+  //  Create an ID that comprises <project>_<cell_line>_<condition> and use it 
+  //  to cross Treatment INTO background (required as *some backgrounds can be 
+  //  used by multiple treatments*, and cross() is *not commutative*).
   readFiltering_hg38.out.filtered
-    .map { row -> tuple(row[1..3].join("_"),row[1],row[2],row[3],row[0],row[5]) }
-    .groupTuple(by:0..3)
+    .map { row -> tuple(row[0,2,4].join("_"),row[0],row[2..4].join("_"),row[2],row[3],row[4],row[6]) }
+    .groupTuple(by:0..5)
     .set { ch_pooled_all }
-  
+
   ch_pooled_all
-    .filter { it[2].contains(params.control_epitope) }
-    .map { row -> tuple(row[1],row[3],row[5]) }
+    .filter { it[4].contains(params.control_epitope) }
+    .map { row -> tuple(row[0],row[6]) }
     .set { ch_pooled_ctrl }
-  
-  ch_pooled_all
-    .filter { !it[2].contains(params.control_epitope) }
-    .map { row -> tuple(row[1],row[3],row[0],row[2],row[5]) }
-    .set { ch_pooled_test }
     
-  ch_pooled_test.join(ch_pooled_ctrl,remainder:true,by:0..1)
-    .map { row -> tuple(row[2],row[0],row[3],row[1],row[4],row[5]) }
+  ch_pooled_all
+    .filter { !it[4].contains(params.control_epitope) }
+    //.map { row -> tuple(row[0],row[1],row[2],row[3],row[4],row[5]) }
+    .set { ch_pooled_test }
+  
+  ch_pooled_ctrl.cross(ch_pooled_test)
+    .map { it -> tuple(it[1][1],it[1][2],it[1][3],it[1][4],it[1][5],it[1][6],it[0][1]) }
     .set { ch_pooled_bams }
   
+  // Pooled peak calling.
   peakCallingNarrowPooled(ch_pooled_bams,blk_lst,seq_szs)
   peakCallingBroadPooled(ch_pooled_bams,blk_lst,seq_szs)
   
   // Combine replicate spike summaries.
   bamBest.out.spike
-    .filter { !it[2].contains(params.control_epitope) }
-    .map { row -> tuple(row[1..3].join("_"),row[5]) }
+    .filter { !it[3].contains(params.control_epitope) }
+    .map { row -> tuple(row[2..4].join("_"),row[6]) }
     .groupTuple()
     .set { spike_tsvs }
   combineSpikes(spike_tsvs)
-  
-  // Summit sequences.
+    
+  // Retrieve peak sequences.
   getSequences_summits(peakCallingNarrowPooled.out.summits,params.fasta_hg38,"summits")
   getSequences_narrows(peakCallingNarrowPooled.out.narrowPeaks,params.fasta_hg38,"narrowPeaks")
   
   // Cut points.
   ch_pooled_bams
-    .map{ row -> tuple(row[0],row[1],row[3],row[4]) }
+    .map{ row -> tuple(row[0],row[1],row[2],row[3],row[4],row[5]) }
     .mix(
-      ch_pooled_bams.map{ row -> tuple(row[0],row[1],row[3],row[5]) }
+      ch_pooled_bams.map{ row -> tuple(row[0],row[1],row[2],row[3],row[4],row[6]) }
     )
     .transpose() 
     .combine(  
-      peakCallingNarrowPooled.out.summits.map{ row -> tuple(row[4]) }
+      peakCallingNarrowPooled.out.summits.map{ row -> tuple(row[5]) }
     )
     .combine(  
-      peakCallingNarrowPooled.out.narrowPeaks.map{ row -> tuple(row[4]) }
+      peakCallingNarrowPooled.out.narrowPeaks.map{ row -> tuple(row[5]) }
     )
     .set {ch_cuts}
-  getCutPoints_summits(ch_cuts.map{ row -> tuple(row[0],row[3],row[4])},params.dir_pool,"summit")
-  getCutPoints_narrows(ch_cuts.map{ row -> tuple(row[0],row[3],row[5])},params.dir_pool,"narrowPeak")
+  getCutPoints_summits(ch_cuts.map{ row -> tuple(row[1],row[5],row[6])},params.dir_pool,"summit")
+  getCutPoints_narrows(ch_cuts.map{ row -> tuple(row[1],row[5],row[7])},params.dir_pool,"narrowPeak")
   
   // SEA
-  //memeSEA(getSequences_summits.out.seqs,params.motif_db,"summits")
+  memeSEA(getSequences_summits.out.seqs,params.motif_db,"summits")
   
   // FIMO
-  //memeFIMO_summits(getSequences_summits.out.seqs,params.motif_db,"summits")
+  memeFIMO_summits(getSequences_summits.out.seqs,params.motif_db,"summits")
   //memeFIMO_narrows(getSequences_narrows.out.seqs,params.motif_db,"narrowPeaks")
   
   // CENTRIMO
   memeCENTRIMO(getSequences_summits.out.seqs,params.motif_db,"summits")
-  
+
   // ROSE
- 
 }

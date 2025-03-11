@@ -46,9 +46,40 @@ At minimum, three parameters should be provided to the nextflow pipeline, as wel
 
 The primary input of the `cutNrun.nf` pipeline is a CSV file containing one sample per row with annotations for each file and FastQ files for reads 1 and 2. The table format is:
 
-name | cell_line | epitope | condition | replicate | R1 | R2 
---- | --- | --- | --- | --- | --- |---
-H358_MYC_WT_1 | H358      | MYC     | WT        |     1     | R1.fastq.gz | R2.fastq.gz
-H358_MYC_WT_1 | H358      | MYC     | WT        |     2     | R1.fastq.gz | R2.fastq.gz
-H358_IgG_WT_1 | H358      | IgG     | WT        |     1     | R1.fastq.gz | R2.fastq.gz
+project | name | cell_line | epitope | condition | replicate | R1 | R2 
+--- | --- | --- | --- | --- | --- | --- |---
+run1 | H358_MYC_WT_1 | H358      | MYC     | WT        |     1     | R1.fastq.gz | R2.fastq.gz
+run1 | H358_MYC_WT_1 | H358      | MYC     | WT        |     2     | R1.fastq.gz | R2.fastq.gz
+run1 | H358_IgG_WT_1 | H358      | IgG     | WT        |     1     | R1.fastq.gz | R2.fastq.gz
 
+## Output
+
+Output file structure is separated into `pooled` and `replicate` folders, with analyses run on individual replicates stored in the latter. Peak calling is performed by [`MACS3`](https://github.com/macs3-project/MACS). For individual replicates, no background is used: signal in a given region is compared to signal across the genome. Note that this is not ideal, particularly in samples with complex genomes. `MACS3` performs pooled peak calling by concatenating all replicates (treatment and background), then calling peaks using background samples to normalize for sequencing biases, copy number, etc. Note that this pipeline runs under the assumption that treatment and background samples should be produced within *the same sequencing run*, *the same cell type*, and *under the same conditions*. To modify this, alter the columns in the input CSV.
+
+For instance, to use IgG background samples from one sequencing project as controls for another project, assign the replicates the same project name. This is not advised, however.
+```
+data
+├── pooled
+│   ├── H358_MYC_WG
+│   │   ├── meme
+│   │   │   ├── centrimo
+│   │   │   ├── fimo
+│   │   │   └── sea
+│   │   ├── peaks
+│   │   │   └── cuts
+│   │   └── qc
+└── replicates
+    ├── H358_MYC_WT_1
+    │   ├── align
+    │   ├── peaks
+    │   └── qc
+    ├── H358_MYC_WT_2
+    │   ├── align
+    │   ├── peaks
+    │   └── qc
+    └── H358_IgG_WG_1
+        ├── align
+        ├── peaks
+        └── qc
+  
+```

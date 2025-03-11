@@ -10,13 +10,13 @@ process peakCallingBroad {
   publishDir "${out_dir}/${samp_name}/peaks", mode: 'copy', pattern: "*.broadPeak"
   
   input:
-    tuple val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path(bam_file)
+    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path(bam_file)
     path blacklist_bed
     path seqsize_tsv
     val out_dir
   
   output:
-    tuple val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_peaks.broadPeak"), emit: "broadPeaks"
+    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_peaks.broadPeak"), emit: "broadPeaks"
     path "*.txt"
     path "*.tsv"
   

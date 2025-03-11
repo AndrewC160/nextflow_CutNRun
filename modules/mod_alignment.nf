@@ -8,11 +8,11 @@ process alignment {
   publishDir "${params.dir_reps}/${samp_name}/qc", mode: 'copy', pattern: "*.txt"
   
   input:
-    tuple val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path(fastq_r1), path(fastq_r2)
+    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path(fastq_r1), path(fastq_r2)
     path bowtie2_idx
   
   output:
-    tuple val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("*.bam"), emit: "aligned"
+    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("*.bam"), emit: "aligned"
     path "*"
   
   script:

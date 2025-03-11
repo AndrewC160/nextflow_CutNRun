@@ -14,16 +14,16 @@ process peakCallingNarrow {
   publishDir "${out_dir}/${samp_name}/peaks", mode: 'copy', pattern: "*.narrowPeak"
   
   input:
-    tuple val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path(bam_file)
+    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path(bam_file)
     path blacklist_bed
     path seqsize_tsv
     val out_dir
   
   output:
-    tuple val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_peaks.narrowPeak"), emit: "narrowPeaks"
-    tuple val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_summits.bed"), emit: "summits"
-    tuple val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_control_lambda.bdg.gz"), path("${samp_name}_control_lambda.bdg.gz.tbi"), emit: "ctrlBDG"
-    tuple val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_treat_pileup.bdg.gz"), path("${samp_name}_treat_pileup.bdg.gz.tbi"), emit: "treatBDG"
+    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_peaks.narrowPeak"), emit: "narrowPeaks"
+    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_summits.bed"), emit: "summits"
+    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_control_lambda.bdg.gz"), path("${samp_name}_control_lambda.bdg.gz.tbi"), emit: "ctrlBDG"
+    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_treat_pileup.bdg.gz"), path("${samp_name}_treat_pileup.bdg.gz.tbi"), emit: "treatBDG"
     path "*.txt"
     path "*.tsv"
   

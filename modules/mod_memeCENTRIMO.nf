@@ -8,7 +8,7 @@ process memeCENTRIMO {
   publishDir "${params.dir_pool}/${samp_name}/meme/centrimo", mode: 'copy', pattern: "*"
   
   input:
-    tuple val(samp_name), val(cell_line), val(epitope), val(condition), path(fasta_file)
+    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(condition), path(fasta_file)
     path motif_file
     val prefix
   

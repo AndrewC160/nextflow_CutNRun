@@ -12,13 +12,13 @@ process readFiltering {
   publishDir "${params.dir_reps}/${samp_name}/align", mode: 'copy', pattern: "*.bai"
   
   input:
-    tuple val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path(bam_file)
+    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path(bam_file)
     val(gen_nm)
     path(blacklist_bed)
     
   output:
-    tuple val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_${gen_nm}.bam"), emit: "filtered"
-    tuple val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_${gen_nm}_long.bam"), emit: "filtered_long"
+    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_${gen_nm}.bam"), emit: "filtered"
+    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_${gen_nm}_long.bam"), emit: "filtered_long"
     path "*.txt"
     path "*.zip"
     path "*.html"
