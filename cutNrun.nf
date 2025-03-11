@@ -55,7 +55,9 @@ workflow {
     .splitCsv(header: true)
     .map { row -> tuple(row.proj,row.name,row.cell_line,row.epitope,row.cond,row.rep,file(row.R1),file(row.R2)) }
     .set { ch_input }
-    
+  
+  // Detect duplicate names.
+  
   // Truncate FastQs (OPTIONAL)
   // For use when running pipeline with stub dataset.
   (ch_trunc,ch_full) = params.truncate_fastqs
