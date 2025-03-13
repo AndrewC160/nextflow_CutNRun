@@ -9,6 +9,8 @@ params.dir_out
 params.control_epitope = "IgG"
 params.truncate_fastqs = true
 params.truncate_count = 100000
+params.run_meme = false
+params.run_cuts = false
 
 // Directories.
 params.dir_modules = "${projectDir}/modules"
@@ -119,7 +121,6 @@ workflow {
     
   ch_pooled_all
     .filter { !it[4].contains(params.control_epitope) }
-    //.map { row -> tuple(row[0],row[1],row[2],row[3],row[4],row[5]) }
     .set { ch_pooled_test }
   
   ch_pooled_ctrl.cross(ch_pooled_test)
@@ -156,18 +157,23 @@ workflow {
       peakCallingNarrowPooled.out.narrowPeaks.map{ row -> tuple(row[5]) }
     )
     .set {ch_cuts}
-  getCutPoints_summits(ch_cuts.map{ row -> tuple(row[1],row[5],row[6])},params.dir_pool,"summit")
-  getCutPoints_narrows(ch_cuts.map{ row -> tuple(row[1],row[5],row[7])},params.dir_pool,"narrowPeak")
   
-  // SEA
-  memeSEA(getSequences_summits.out.seqs,params.motif_db,"summits")
+  if(params.run_cuts){
+    getCutPoints_summits(ch_cuts.map{ row -> tuple(row[1],row[5],row[6])},params.dir_pool,"summit")
+    getCutPoints_narrows(ch_cuts.map{ row -> tuple(row[1],row[5],row[7])},params.dir_pool,"narrowPeak")
+  }
   
-  // FIMO
-  memeFIMO_summits(getSequences_summits.out.seqs,params.motif_db,"summits")
-  //memeFIMO_narrows(getSequences_narrows.out.seqs,params.motif_db,"narrowPeaks")
-  
-  // CENTRIMO
-  memeCENTRIMO(getSequences_summits.out.seqs,params.motif_db,"summits")
+  if(params.run_meme){
+    // SEA
+    memeSEA(getSequences_summits.out.seqs,params.motif_db,"summits")
+    
+    // FIMO
+    memeFIMO_summits(getSequences_summits.out.seqs,params.motif_db,"summits")
+    memeFIMO_narrows(getSequences_narrows.out.seqs,params.motif_db,"narrowPeaks")
+    
+    // CENTRIMO
+    memeCENTRIMO(getSequences_summits.out.seqs,params.motif_db,"summits")
+  }
 
   // ROSE
 }
