@@ -5,9 +5,9 @@ process peakCallingBroadPooled{
   cpus 1
   memory '16GB'
   
-  publishDir "${params.dir_pool}/${samp_name}/qc", mode: 'copy', pattern: "*_report.txt"
-  publishDir "${params.dir_pool}/${samp_name}/qc", mode: 'copy', pattern: "*.tsv"
-  publishDir "${params.dir_pool}/${samp_name}/peaks", mode: 'copy', pattern: "*.broadPeak"
+  publishDir "${params.dir_pool}/${samp_name}_${proj}/qc", mode: 'copy', pattern: "*_report.txt"
+  publishDir "${params.dir_pool}/${samp_name}_${proj}/qc", mode: 'copy', pattern: "*.tsv"
+  publishDir "${params.dir_pool}/${samp_name}_${proj}/peaks", mode: 'copy', pattern: "*.broadPeak"
   
   input:
     tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(condition), path(bams_input), path(bams_ctrl)

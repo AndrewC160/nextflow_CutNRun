@@ -5,7 +5,7 @@ process getSequences {
   cpus 1
   memory '16GB'
   
-  publishDir "${params.dir_pool}/${samp_name}/peaks", mode: 'copy', pattern: "*.fasta"
+  publishDir "${params.dir_pool}/${samp_name}_${proj}/peaks", mode: 'copy', pattern: "*.fasta"
   
   input:
     tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(condition), path(bed_file)

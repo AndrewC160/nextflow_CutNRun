@@ -5,13 +5,13 @@ process peakCallingNarrowPooled {
   cpus 1
   memory '16GB'
   
-  publishDir "${params.dir_pool}/${samp_name}/qc", mode: 'copy', pattern: "*_report.txt"
-  publishDir "${params.dir_pool}/${samp_name}/qc", mode: 'copy', pattern: "*.tsv"
-  publishDir "${params.dir_pool}/${samp_name}/peaks", mode: 'copy', pattern: "*.gz"
-  publishDir "${params.dir_pool}/${samp_name}/peaks", mode: 'copy', pattern: "*.tbi"
-  publishDir "${params.dir_pool}/${samp_name}/peaks", mode: 'copy', pattern: "*.bed"
-  publishDir "${params.dir_pool}/${samp_name}/peaks", mode: 'copy', pattern: "*.tsv"
-  publishDir "${params.dir_pool}/${samp_name}/peaks", mode: 'copy', pattern: "*.narrowPeak"
+  publishDir "${params.dir_pool}/${samp_name}_${proj}/qc", mode: 'copy', pattern: "*_report.txt"
+  publishDir "${params.dir_pool}/${samp_name}_${proj}/qc", mode: 'copy', pattern: "*.tsv"
+  publishDir "${params.dir_pool}/${samp_name}_${proj}/peaks", mode: 'copy', pattern: "*.tbi"
+  publishDir "${params.dir_pool}/${samp_name}_${proj}/peaks", mode: 'copy', pattern: "*.gz"
+  publishDir "${params.dir_pool}/${samp_name}_${proj}/peaks", mode: 'copy', pattern: "*.bed"
+  publishDir "${params.dir_pool}/${samp_name}_${proj}/peaks", mode: 'copy', pattern: "*.tsv"
+  publishDir "${params.dir_pool}/${samp_name}_${proj}/peaks", mode: 'copy', pattern: "*.narrowPeak"
   
   input:
     tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), path(bams_input), path(bams_ctrl)

@@ -134,17 +134,18 @@ workflow {
   // Combine replicate spike summaries.
   bamBest.out.spike
     .filter { !it[3].contains(params.control_epitope) }
-    .map { row -> tuple(row[2..4].join("_"),row[6]) }
+    .map { row -> tuple(row[2..4,0].join("_"),row[6]) }
     .groupTuple()
     .set { spike_tsvs }
   combineSpikes(spike_tsvs)
-    
+  
   // Retrieve peak sequences.
   getSequences_summits(peakCallingNarrowPooled.out.summits,params.fasta_hg38,"summits")
   getSequences_narrows(peakCallingNarrowPooled.out.narrowPeaks,params.fasta_hg38,"narrowPeaks")
   
   // Cut points.
-  ch_pooled_bams
+  if(params.run_cuts){
+    ch_pooled_bams
     .map{ row -> tuple(row[0],row[1],row[2],row[3],row[4],row[5]) }
     .mix(
       ch_pooled_bams.map{ row -> tuple(row[0],row[1],row[2],row[3],row[4],row[6]) }
@@ -157,8 +158,7 @@ workflow {
       peakCallingNarrowPooled.out.narrowPeaks.map{ row -> tuple(row[5]) }
     )
     .set {ch_cuts}
-  
-  if(params.run_cuts){
+    
     getCutPoints_summits(ch_cuts.map{ row -> tuple(row[1],row[5],row[6])},params.dir_pool,"summit")
     getCutPoints_narrows(ch_cuts.map{ row -> tuple(row[1],row[5],row[7])},params.dir_pool,"narrowPeak")
   }
@@ -174,6 +174,5 @@ workflow {
     // CENTRIMO
     memeCENTRIMO(getSequences_summits.out.seqs,params.motif_db,"summits")
   }
-
   // ROSE
 }

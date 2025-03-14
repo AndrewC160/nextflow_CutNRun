@@ -5,7 +5,7 @@ process memeFIMO {
   cpus 1
   memory '64GB'
   
-  publishDir "${params.dir_pool}/${samp_name}/meme/fimo", mode: 'copy', pattern: "*"
+  publishDir "${params.dir_pool}/${samp_name}_${proj}/meme/fimo", mode: 'copy', pattern: "*"
   
   input:
     tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(condition), path(fasta_file)
