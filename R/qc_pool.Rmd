@@ -1,0 +1,92 @@
+---
+title: "Pool QC"
+author: "Andrew Clugston"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: spacelab
+    code_folding: hide
+params:
+  pool_name: "OS526_K27Ac_NONE_Project_ACEH_EH005"
+  tsv_spike: "/N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/pooled/OS526_K27Ac_NONE_Project_ACEH_EH005/OS526_K27Ac_NONE_Project_ACEH_EH005_spike.tsv"
+  bdg_pool: "/N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/pooled/OS526_K27Ac_NONE_Project_ACEH_EH005/peaks/OS526_K27Ac_NONE_treat_pileup.bdg.gz"
+  bdgs_reps: "/N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/replicates/OS526_NONE_K27Ac_1/peaks/OS526_NONE_K27Ac_1_treat_pileup.bdg.gz /N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/replicates/OS526_NONE_K27Ac_2/peaks/OS526_NONE_K27Ac_2_treat_pileup.bdg.gz /N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/replicates/OS526_NONE_K27Ac_3/peaks/OS526_NONE_K27Ac_3_treat_pileup.bdg.gz"
+  nPeaks_pool: "/N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/pooled/OS526_K27Ac_NONE_Project_ACEH_EH005/peaks/OS526_K27Ac_NONE_peaks.narrowPeak"
+  bPeaks_pool: "/N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/pooled/OS526_K27Ac_NONE_Project_ACEH_EH005/peaks/OS526_K27Ac_NONE_peaks.broadPeak"
+  summits_pool: "/N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/pooled/OS526_K27Ac_NONE_Project_ACEH_EH005/peaks/OS526_K27Ac_NONE_summits.bed"
+  ctrl_epitope: "IgG"
+---
+
+
+```{r setup, include=FALSE}
+library(tidyverse) 
+library(ascCutNRun)
+library(data.table)
+library(clugPac)
+library(ggplot2)
+library(magrittr)
+library(scales)
+library(knitr)
+library(kableExtra)
+library(ascFunctions)
+library(cowplot)
+library(GenomicRanges)
+library(reactable)
+knitr::opts_chunk$set(echo = TRUE)
+
+
+# Aliases.
+mutate  <- dplyr::mutate
+filter  <- dplyr::filter
+arrange <- dplyr::arrange
+rename  <- dplyr::rename
+o_write <- TRUE
+
+dirs      <- list(data=file.path(params$output_dir))
+dirs$reps <- file.path(dirs$data,"replicates")
+dirs$pools<- file.path(dirs$data,"pooled")
+dirs$figs <- file.path("figs")
+
+dir.create(dirs$figs,showWarnings = FALSE)
+
+knitr::opts_chunk$set(echo = TRUE,fig.width = 10,fig.height = 6,warning = FALSE,message = FALSE)
+```
+```{r loadData}
+fl_list <- list(spikes=params$tsv_spike,
+                bdg_pool=params$bdg_pool,
+                bdgs_reps=str_split(params$bdgs_reps,pattern=" "),
+                nPeaks_pool=params$nPeaks_pool,
+                bPeaks_pool=params$bPeaks_pool,
+                summits_pool=params$summits_pool)
+dirs_reps <- sapply(fl_list$bdgs_reps,dirname)
+```
+
+# `r params$pool_name`
+
+## Files:
+
+**Replicates:** 
+
+`r paste(sapply(fl_list$bdgs_reps,function(x) dirname(dirname(x))),collapse="\n\n")`
+
+**Bedgraph:** 
+
+`r fl_list$bdg_pool`
+
+**NarrowPeaks:** 
+
+`r fl_list$nPeaks_pool`
+
+**BroadPeaks:** 
+
+`r fl_list$bPeaks_pool`
+
+**Summits:** 
+
+`r fl_list$summits_pool`
+
+**TSV spike:** 
+
+`r fl_list$spikes`

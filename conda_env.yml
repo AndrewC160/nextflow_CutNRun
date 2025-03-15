@@ -44,6 +44,7 @@ dependencies:
   - r-gridextra
   - r-magrittr
   - r-nloptr
+  - r-reactable
   - r-regioner
   - r-tictoc
   - r-tidyverse

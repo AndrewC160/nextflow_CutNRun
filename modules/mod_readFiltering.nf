@@ -4,7 +4,7 @@ process readFiltering {
   tag "${samp_name}"
   cpus 8
   memory '32.GB'
-  
+  errorStrategy 'ignore'
   publishDir "${params.dir_reps}/${samp_name}/qc", mode: 'copy', pattern: "*.txt"
   publishDir "${params.dir_reps}/${samp_name}/qc", mode: 'copy', pattern: "*.zip"
   publishDir "${params.dir_reps}/${samp_name}/qc", mode: 'copy', pattern: "*.html"
@@ -19,8 +19,9 @@ process readFiltering {
   output:
     tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_${gen_nm}.bam"), emit: "filtered"
     tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_${gen_nm}_long.bam"), emit: "filtered_long"
-    path "*.txt"
+    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_${gen_nm}_short_fastqc.zip"), emit: "fastQC"
     path "*.zip"
+    path "*.txt"
     path "*.html"
     
   script:
@@ -38,15 +39,16 @@ process readFiltering {
   samtools sort -@ 8 -O 'bam' -T 'srt_tmp' ${bam_file} > ${bam1}
   
   # Add @RG line to header so that MarkDuplicates doesn't explode.
-  samtools addreplacerg -w -r '@RG\tID:RG1\tSM:${samp_name}\tPL:Illumina\tLB:Library.fa' -o ${bam2} ${bam1}
+  samtools addreplacerg -w -r '@RG\tID:RG1\tSM:${samp_name}' -o ${bam2} ${bam1}
   
   # Remove duplicates.
   picard MarkDuplicates \
     -I ${bam2} \
     -O ${bam3} \
     -M ${rpt_dups} \
-    -ASSUME_SORTED true \
-    -REMOVE_DUPLICATES true \
+    --ASSUME_SORTED true \
+    --REMOVE_DUPLICATES true \
+    --VERBOSITY ERROR \
     --QUIET true
     
   # Remove reads in blacklist regions.

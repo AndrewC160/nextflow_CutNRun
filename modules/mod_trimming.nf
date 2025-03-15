@@ -11,6 +11,7 @@ process trimming {
   
   output:
     tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_val_1.fq"), path("${samp_name}_val_2.fq"), emit: "trimmed"
+    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_val_1_fastqc.zip"), path("${samp_name}_val_2_fastqc.zip"), emit: "FastQC"
     path "*"
   
   script:

@@ -9,6 +9,7 @@ params.dir_out
 params.control_epitope = "IgG"
 params.truncate_fastqs = true
 params.truncate_count = 100000
+params.run_seqs = false
 params.run_meme = false
 params.run_cuts = false
 
@@ -51,11 +52,39 @@ include { memeCENTRIMO } from "${params.dir_modules}/mod_memeCENTRIMO.nf"
 include { getCutPoints as getCutPoints_summits } from "${params.dir_modules}/mod_getCutPoints.nf"
 include { getCutPoints as getCutPoints_narrows } from "${params.dir_modules}/mod_getCutPoints.nf"
 
+process poolReport {
+  tag "${samp_name}"
+  publishDir "${params.dir_reps}/${samp_name}_${proj}/qc", mode: 'copy', pattern: "*.html"
+  
+  input:
+    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path(bam_hg38_in), path(bam_sac3_in)
+  
+  output:
+    path "*"
+  
+  script:
+  bam_hg38_out = "${samp_name}_hg38.bam"
+  bam_sac3_out = "${samp_name}_sac3.bam"
+  tsv_spike = "${samp_name}_spike.tsv"
+  """
+  Rscript -e 'rmarkdown::render("${params.dir_R}/qc_pool.Rmd",output_format="html_document",
+  """
+  //pool_name: "OS526_K27Ac_NONE_Project_ACEH_EH005"
+  //tsv_spike: "/N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/pooled/OS526_K27Ac_NONE_Project_ACEH_EH005/OS526_K27Ac_NONE_Project_ACEH_EH005_spike.tsv"
+  //bdg_pool: "/N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/pooled/OS526_K27Ac_NONE_Project_ACEH_EH005/peaks/OS526_K27Ac_NONE_treat_pileup.bdg.gz"
+  //bdgs_reps: "/N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/replicates/OS526_NONE_K27Ac_1/peaks/OS526_NONE_K27Ac_1_treat_pileup.bdg.gz /N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/replicates/OS526_NONE_K27Ac_2/peaks/OS526_NONE_K27Ac_2_treat_pileup.bdg.gz /N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/replicates/OS526_NONE_K27Ac_3/peaks/OS526_NONE_K27Ac_3_treat_pileup.bdg.gz"
+  //nPeaks_pool: "/N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/pooled/OS526_K27Ac_NONE_Project_ACEH_EH005/peaks/OS526_K27Ac_NONE_peaks.narrowPeak"
+  //bPeaks_pool: "/N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/pooled/OS526_K27Ac_NONE_Project_ACEH_EH005/peaks/OS526_K27Ac_NONE_peaks.broadPeak"
+  //summits_pool: "/N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/pooled/OS526_K27Ac_NONE_Project_ACEH_EH005/peaks/OS526_K27Ac_NONE_summits.bed"
+  //ctrl_epitope: "IgG"
+}
+
+
 workflow {
   // Read CSV.
   Channel.fromPath(params.sample_table)
     .splitCsv(header: true)
-    .map { row -> tuple(row.proj,row.name,row.cell_line,row.epitope,row.cond,row.rep,file(row.R1),file(row.R2)) }
+    .map { row -> tuple(row.project,row.name,row.cell_line,row.epitope,row.cond,row.rep,file(row.R1),file(row.R2)) }
     .set { ch_input }
   
   // Detect duplicate names.
@@ -94,16 +123,17 @@ workflow {
   seq_szs = file(params.seqsizes)
   peakCallingNarrow(readFiltering_hg38.out.filtered,blk_lst,seq_szs,params.dir_reps)
   peakCallingBroad(readFiltering_hg38.out.filtered,blk_lst,seq_szs,params.dir_reps)
-  
+
   // FRiP scores
   readFiltering_hg38.out.filtered
-    .map { row -> tuple(row[1],row[6]) }
+    .map { row -> tuple(row[2..4,0].join("_"),row[6]) }
     .join(
       peakCallingNarrow.out.narrowPeaks 
-        .map {row -> tuple(row[1],row[6]) } )
+        .map {row -> tuple(row[2..4,0].join("_"),row[6]) } )
     .set { ch_frip_reps }
-  calculateFRiP(ch_frip_reps,"narrowPeaks")
   
+  calculateFRiP(ch_frip_reps,"narrowPeaks")
+  if(false){
   // Sample pooling.
   //  Split bams into treatment/background.
   //  Create an ID that comprises <project>_<cell_line>_<condition> and use it 
@@ -130,7 +160,7 @@ workflow {
   // Pooled peak calling.
   peakCallingNarrowPooled(ch_pooled_bams,blk_lst,seq_szs)
   peakCallingBroadPooled(ch_pooled_bams,blk_lst,seq_szs)
-  
+  }
   // Combine replicate spike summaries.
   bamBest.out.spike
     .filter { !it[3].contains(params.control_epitope) }
@@ -138,10 +168,12 @@ workflow {
     .groupTuple()
     .set { spike_tsvs }
   combineSpikes(spike_tsvs)
-  
+
   // Retrieve peak sequences.
-  getSequences_summits(peakCallingNarrowPooled.out.summits,params.fasta_hg38,"summits")
-  getSequences_narrows(peakCallingNarrowPooled.out.narrowPeaks,params.fasta_hg38,"narrowPeaks")
+  if(params.run_seqs){
+    getSequences_summits(peakCallingNarrowPooled.out.summits,params.fasta_hg38,"summits")
+    getSequences_narrows(peakCallingNarrowPooled.out.narrowPeaks,params.fasta_hg38,"narrowPeaks")
+  }
   
   // Cut points.
   if(params.run_cuts){
@@ -174,5 +206,21 @@ workflow {
     // CENTRIMO
     memeCENTRIMO(getSequences_summits.out.seqs,params.motif_db,"summits")
   }
+  // Pool report.
+  //spike_tsvs.view()
+  //peakCallingNarrow.out.narrowPeaks.filter{ !it[3].contains(params.control_epitope) }.map { row -> tuple(row[2..4,0].join("_"),row[6])}.groupTuple().view()
+  //peakCallingBroad.out.broadPeaks.filter{ !it[3].contains(params.control_epitope) }.map { row -> tuple(row[2..4,0].join("_"),row[6])}.groupTuple().view()
+  //calculateFRiP.out.FRiP.view()
+  
+  //pool_name: "OS526_K27Ac_NONE_Project_ACEH_EH005"
+  //tsv_spike: "/N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/pooled/OS526_K27Ac_NONE_Project_ACEH_EH005/OS526_K27Ac_NONE_Project_ACEH_EH005_spike.tsv"
+  //bdg_pool: "/N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/pooled/OS526_K27Ac_NONE_Project_ACEH_EH005/peaks/OS526_K27Ac_NONE_treat_pileup.bdg.gz"
+  //bdgs_reps: "/N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/replicates/OS526_NONE_K27Ac_1/peaks/OS526_NONE_K27Ac_1_treat_pileup.bdg.gz /N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/replicates/OS526_NONE_K27Ac_2/peaks/OS526_NONE_K27Ac_2_treat_pileup.bdg.gz /N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/replicates/OS526_NONE_K27Ac_3/peaks/OS526_NONE_K27Ac_3_treat_pileup.bdg.gz"
+  //nPeaks_pool: "/N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/pooled/OS526_K27Ac_NONE_Project_ACEH_EH005/peaks/OS526_K27Ac_NONE_peaks.narrowPeak"
+  //bPeaks_pool: "/N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/pooled/OS526_K27Ac_NONE_Project_ACEH_EH005/peaks/OS526_K27Ac_NONE_peaks.broadPeak"
+  //summits_pool: "/N/p/asclab/ASC-cutNrun/25MAR09-tf_examples/data/pooled/OS526_K27Ac_NONE_Project_ACEH_EH005/peaks/OS526_K27Ac_NONE_summits.bed"
+  //ctrl_epitope: "IgG"
   // ROSE
+  
+  
 }

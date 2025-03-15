@@ -9,7 +9,7 @@ process calculateFRiP {
     val(suffix)
   
   output:
-    path "${samp_name}_${suffix}_FRiP.txt"
+    tuple val(samp_name), path("${samp_name}_${suffix}_FRiP.txt"), emit: "FRiP"
   
   script:
   outp_txt = "${samp_name}_${suffix}_FRiP.txt"
