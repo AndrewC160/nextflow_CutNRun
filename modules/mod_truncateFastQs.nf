@@ -5,11 +5,11 @@ process truncateFastQs{
   cpus 6
   
   input:
-  tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path(fastq_r1), path(fastq_r2)
+  tuple val(sys_idx), val(samp_idx), val(cond_name), val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path(fastq_r1), path(fastq_r2)
   val fastq_reads
   
   output:
-  tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path(fastq_r1_out), path(fastq_r2_out)
+  tuple val(sys_idx), val(samp_idx), val(cond_name), val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path(fastq_r1_out), path(fastq_r2_out)
   
   script:
   fastq_r1_out = "${fastq_r1.getSimpleName()}_trunc.fastq.gz"

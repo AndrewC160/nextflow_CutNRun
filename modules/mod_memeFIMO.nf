@@ -1,14 +1,14 @@
 #!/usr/bin/env nextflow
 
 process memeFIMO {
-  tag "${samp_name}"
+  tag "${sys_idx}"
   cpus 1
   memory '64GB'
   
-  publishDir "${params.dir_pool}/${samp_name}_${proj}/meme/fimo", mode: 'copy', pattern: "*"
+  publishDir "${params.dir_pool}/${sys_idx}/meme/fimo", mode: 'copy', pattern: "*"
   
   input:
-    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(condition), path(fasta_file)
+    tuple val(sys_idx), val(samp_idx), val(samp_name), val(proj), val(cell_line), val(epitope), val(condition), path(fasta_file)
     path motif_file
     val prefix
   
@@ -23,7 +23,3 @@ process memeFIMO {
   done
   """
 }
-
-
-
-//74/dd2b4e

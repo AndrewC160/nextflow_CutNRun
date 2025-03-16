@@ -5,11 +5,11 @@ process calculateFRiP {
   publishDir "${params.dir_reps}/${samp_name}/qc", mode: 'copy'
   
   input:
-    tuple val(samp_name), path(bam_file), path(bed_file)
+    tuple val(sys_idx), val(samp_name), path(bam_file), path(bed_file)
     val(suffix)
   
   output:
-    tuple val(samp_name), path("${samp_name}_${suffix}_FRiP.txt"), emit: "FRiP"
+    tuple val(sys_idx), val(samp_name), path("${samp_name}_${suffix}_FRiP.txt"), emit: "frip"
   
   script:
   outp_txt = "${samp_name}_${suffix}_FRiP.txt"

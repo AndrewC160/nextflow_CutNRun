@@ -7,11 +7,11 @@ process trimming {
   publishDir "${params.dir_reps}/${samp_name}/qc", mode: 'copy', pattern: "*.html"
   
   input:
-    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path(fastq_r1), path(fastq_r2)
+    tuple val(sys_idx), val(samp_idx), val(cond_name), val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path(fastq_r1), path(fastq_r2)
   
   output:
-    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_val_1.fq"), path("${samp_name}_val_2.fq"), emit: "trimmed"
-    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_val_1_fastqc.zip"), path("${samp_name}_val_2_fastqc.zip"), emit: "FastQC"
+    tuple val(sys_idx), val(samp_idx), val(cond_name), val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_val_1.fq"), path("${samp_name}_val_2.fq"), emit: "trimmed"
+    tuple val(sys_idx), val(samp_idx), val(cond_name), val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_val_1_fastqc.zip"), path("${samp_name}_val_2_fastqc.zip"), emit: "fastqc"
     path "*"
   
   script:

@@ -1,28 +1,28 @@
 #!/usr/bin/env nextflow
 
 process peakCallingNarrowPooled {
-  tag "${samp_name}"
+  tag "${samp_idx}"
   cpus 1
   memory '16GB'
   
-  publishDir "${params.dir_pool}/${samp_name}_${proj}/qc", mode: 'copy', pattern: "*_report.txt"
-  publishDir "${params.dir_pool}/${samp_name}_${proj}/qc", mode: 'copy', pattern: "*.tsv"
-  publishDir "${params.dir_pool}/${samp_name}_${proj}/peaks", mode: 'copy', pattern: "*.tbi"
-  publishDir "${params.dir_pool}/${samp_name}_${proj}/peaks", mode: 'copy', pattern: "*.gz"
-  publishDir "${params.dir_pool}/${samp_name}_${proj}/peaks", mode: 'copy', pattern: "*.bed"
-  publishDir "${params.dir_pool}/${samp_name}_${proj}/peaks", mode: 'copy', pattern: "*.tsv"
-  publishDir "${params.dir_pool}/${samp_name}_${proj}/peaks", mode: 'copy', pattern: "*.narrowPeak"
+  publishDir "${params.dir_pool}/${samp_idx}/qc", mode: 'copy', pattern: "*_report.txt"
+  publishDir "${params.dir_pool}/${samp_idx}/qc", mode: 'copy', pattern: "*.tsv"
+  publishDir "${params.dir_pool}/${samp_idx}/peaks", mode: 'copy', pattern: "*.tbi"
+  publishDir "${params.dir_pool}/${samp_idx}/peaks", mode: 'copy', pattern: "*.gz"
+  publishDir "${params.dir_pool}/${samp_idx}/peaks", mode: 'copy', pattern: "*.bed"
+  publishDir "${params.dir_pool}/${samp_idx}/peaks", mode: 'copy', pattern: "*.tsv"
+  publishDir "${params.dir_pool}/${samp_idx}/peaks", mode: 'copy', pattern: "*.narrowPeak"
   
   input:
-    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), path(bams_input), path(bams_ctrl)
+    tuple val(sys_idx), val(samp_idx), val(samp_name), val(proj), val(cell_line), val(epitope), val(cond), path(bams_input), path(bams_ctrl)
     path blacklist_bed
     path seqsize_tsv
   
   output:
-    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), path("${samp_name}_peaks.narrowPeak"), emit: "narrowPeaks"
-    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), path("${samp_name}_summits.bed"), emit: "summits"
-    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), path("${samp_name}_control_lambda.bdg.gz"), path("${samp_name}_control_lambda.bdg.gz.tbi"), emit: "ctrlBDG"
-    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), path("${samp_name}_treat_pileup.bdg.gz"), path("${samp_name}_treat_pileup.bdg.gz.tbi"), emit: "treatBDG"
+    tuple val(sys_idx), val(samp_idx), val(samp_name), val(proj), val(cell_line), val(epitope), val(cond), path("${samp_name}_peaks.narrowPeak"), emit: "narrowPeaks"
+    tuple val(sys_idx), val(samp_idx), val(samp_name), val(proj), val(cell_line), val(epitope), val(cond), path("${samp_name}_summits.bed"), emit: "summits"
+    tuple val(sys_idx), val(samp_idx), val(samp_name), val(proj), val(cell_line), val(epitope), val(cond), path("${samp_name}_control_lambda.bdg.gz"), path("${samp_name}_control_lambda.bdg.gz.tbi"), emit: "ctrlBDG"
+    tuple val(sys_idx), val(samp_idx), val(samp_name), val(proj), val(cell_line), val(epitope), val(cond), path("${samp_name}_treat_pileup.bdg.gz"), path("${samp_name}_treat_pileup.bdg.gz.tbi"), emit: "treatBDG"
     path "*.txt"
     path "*.tsv"
   

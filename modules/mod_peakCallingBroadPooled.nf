@@ -1,21 +1,21 @@
 #!/usr/bin/env nextflow
 
 process peakCallingBroadPooled{
-  tag "${samp_name}"
+  tag "${samp_idx}"
   cpus 1
   memory '16GB'
   
-  publishDir "${params.dir_pool}/${samp_name}_${proj}/qc", mode: 'copy', pattern: "*_report.txt"
-  publishDir "${params.dir_pool}/${samp_name}_${proj}/qc", mode: 'copy', pattern: "*.tsv"
-  publishDir "${params.dir_pool}/${samp_name}_${proj}/peaks", mode: 'copy', pattern: "*.broadPeak"
+  publishDir "${params.dir_pool}/${samp_idx}/qc", mode: 'copy', pattern: "*_report.txt"
+  publishDir "${params.dir_pool}/${samp_idx}/qc", mode: 'copy', pattern: "*.tsv"
+  publishDir "${params.dir_pool}/${samp_idx}/peaks", mode: 'copy', pattern: "*.broadPeak"
   
   input:
-    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(condition), path(bams_input), path(bams_ctrl)
+    tuple val(sys_idx), val(samp_idx), val(samp_name), val(proj), val(cell_line), val(epitope), val(condition), path(bams_input), path(bams_ctrl)
     path blacklist_bed
     path seqsize_tsv
   
   output:
-    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(condition), path("${samp_name}_peaks.broadPeak"), emit: "broadPeaks"
+    tuple val(sys_idx), val(samp_idx), val(samp_name), val(proj), val(cell_line), val(epitope), val(condition), path("${samp_name}_peaks.broadPeak"), emit: "broadPeaks"
     path "*.txt"
     path "*.tsv"
   

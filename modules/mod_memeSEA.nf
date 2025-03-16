@@ -1,11 +1,11 @@
 #!/usr/bin/env nextflow
 
 process memeSEA {
-  tag "${samp_name}"
-  publishDir "${params.dir_pool}/${samp_name}_${proj}/meme/sea", mode: 'copy', pattern: "*"
+  tag "${sys_idx}"
+  publishDir "${params.dir_pool}/${sys_idx}/meme/sea", mode: 'copy', pattern: "*"
   
   input:
-    tuple val(proj), val(samp_name), val(cell_line), val(epitope), val(condition), path(fasta_file)
+    tuple val(sys_idx), val(samp_idx), val(samp_name), val(proj), val(cell_line), val(epitope), val(condition), path(fasta_file)
     path motif_file
     val prefix
   

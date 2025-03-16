@@ -1,18 +1,18 @@
 #!/usr/bin/env nextflow
 
 process combineSpikes {
-  tag "${cond}"
-  publishDir "${params.dir_pool}/${cond}", mode: 'copy', pattern: "*.tsv"
+  tag "${samp_idx}"
+  publishDir "${params.dir_pool}/${samp_idx}", mode: 'copy', pattern: "*.tsv"
   
   input:
-    tuple val(cond), path(spike_files)
+    tuple val(samp_idx), val(samp_name), path(spike_files)
   
   output:
-    tuple val(cond), path("${cond}_spike.tsv"), emit: "spikeTable"
+    tuple val(samp_idx), val(samp_name), path("${samp_name}_spike.tsv"), emit: "spikeTable"
   
   script:
-  tsv_spike = "${cond}_spike.tsv"
+  tsv_spike = "${samp_name}_spike.tsv"
   """
-  Rscript ${params.dir_R}/combine_spike_tsvs.R ${spike_files} > "${cond}_spike.tsv"
+  Rscript ${params.dir_R}/combine_spike_tsvs.R ${spike_files} > "${samp_name}_spike.tsv"
   """
 }
