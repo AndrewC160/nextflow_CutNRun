@@ -139,7 +139,7 @@ Processes are included for three [MEME Suite](https://meme-suite.org/meme/) func
 
 ### Stub files (Optional)
 
-To test/troubleshoot pipeline outputs, "Stub" files can be generated. An optional process will truncate all raw FASTQ files to include a limited number of reads (limit specified via `--trunc_count`) that will process quickly and allow the entire pipeline to run to completion more quickly. For instance, to prepare a stub run using 1 million reads, provide the following two arguments:
+To test/troubleshoot pipeline outputs, "Stub" files can be generated. An optional process will truncate all raw FASTQ files to include a limited number of reads (limit specified via `--trunc_count`) that will process quickly and allow the entire pipeline to run to completion. For instance, to prepare a stub run using 1 million reads, provide the following two arguments:
 ```
 --truncate_fastqs true \
 --truncate_count 1000000
