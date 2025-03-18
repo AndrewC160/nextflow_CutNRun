@@ -2,9 +2,7 @@
 
 [Nextflow](https://github.com/nextflow-io/nextflow) is a popular scripting language that allows for tasks (defined as "processes") to be defined with inputs (dependencies) and outputs, and subsequent tasks that operate on these outputs will be run once all dependencies are ready. Tasks are parallellized, and a failed pipeline can be resumed following failure to pick up where it left off. In the event a script along the pipeline is changed or an input is altered, the process(es) that use that script/input will be repeated with the updated code/inputs. Nextflow is a widely used and readily available system that can be easily shared.
 
-The `cutNrun.nf` script is the base script for the pipeline. When run, this script will subsequently call module scripts (stored in the `modules` directory) that contain specific steps for each process. Additional R scripts that will be called are included in the `R` folder, including a parameterized RMarkdown that will be used to generate an output document.
-
-![*Example Cut&Run pipeline for KLF5 detection using an IgG background.*](https://github.com/user-attachments/assets/befeb93d-0720-43d1-aed0-74f950c133a8)
+![cutNrun_nextflow_pipeline](https://github.com/user-attachments/assets/b610e71e-22db-477b-b462-14b069277dbf)
 
 ## Installation
 
@@ -32,6 +30,8 @@ By default Nextflow will operate within the bounds of the system it is run on (i
 
 ## Execution
 
+The `cutNrun.nf` script is the base script for the pipeline. When run, this script will subsequently call module scripts (stored in the `modules` directory) that contain specific steps for each process. Additional R scripts that will be called are included in the `R` folder, including a parameterized RMarkdown that will be used to generate an output document.
+
 The Nextflow pipeline is executed within the `conda` environment using the command:
 ```
 nextflow run cutNrun.nf \
@@ -46,7 +46,9 @@ At minimum, three parameters should be provided to the nextflow pipeline, as wel
 
 `-dir_out`: Output directory into which outputs will be published.
 
-`-control_epitope`: Control epitope used for background signal, typically "IgG". This value must match at least one sample within the `sample_table` *per sample/condition combination*. All cell line/condition combinations are expected to have at least one background sample.
+`-control_epitope`: Control epitope used for background signal, typically "IgG". This value must match at least one sample within the `sample_table` *per sample/condition combination*. 
+
+For the pooling process to run, each cell line/condition combination (pool) is expected to have at least one background sample; those without are only run through the replicate phase of the pipeline. It is also possible for background samples to apply to multiple pools: for instance, an IgG background in WT H358 cells can be used in one pool testing for KLF5 binding and another for H3K27 acetlyation. 
 
 ### Input table
 
