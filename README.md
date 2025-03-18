@@ -26,7 +26,33 @@ This pipeline is also is missing R packages `clugPac`, `ascFunctions`, and `ascC
 
 ## Configuration
 
-By default Nextflow will operate within the bounds of the system it is run on (i.e. respecting memory/CPU limitations, etc.), but the `nextflow.config` file can be edited to set these limits explicitly. 
+By default Nextflow will operate within the bounds of the system it is run on (i.e. respecting memory/CPU limitations, etc.), but the `nextflow.config` file can be edited to set these limits explicitly.
+
+### Resources
+
+This pipeline requries several accessory files to run, and these are typically stored in a `resources` directory. This folder can be saved in the `nextflow_cutNrun` directory, or it can be specified using the `--dir_resources` argument. This folder must contain the following:
+
+#### Bowtie2 indices
+
+Alignment is performed using [Bowtie2](https://bowtie-bio.sourceforge.net/bowtie2/index.shtml), and so a Bowtie2 index is required for both the sample and spike genomes. [These can be generated manually](https://bowtie-bio.sourceforge.net/bowtie2/manual.shtml#indexing-a-reference-genome), but many pre-built indices are available for download ([here](https://benlangmead.github.io/aws-indexes/bowtie), for instance).
+
+A Bowtie index should consist of a single directory *named after the genome*. Within this directory, substituent bowtie files should have a *prefix that matches the containing folder*. For instance, the Bowtie2 index for the `hg38` genome is:
+```
+hg38
+├── hg38.1.bt2
+├── hg38.2.bt2
+├── hg38.3.bt2
+├── hg38.4.bt2
+├── hg38.rev.1.bt2
+└── hg38.rev.2.bt2
+```
+
+The index directory should be provided to the pipeline *with the index prefix* using the `--bt2_idx=/path/to/bowtie2_index/hg38/hg38`.
+
+
+#### Genome blacklists
+
+https://github.com/Boyle-Lab/Blacklist/blob/master/lists/hg38-blacklist.v2.bed.gz
 
 ## Execution
 
@@ -99,4 +125,4 @@ data
 
 ### nextflow_cutNrun/work
 
-By default, `Nextflow` will generate a `work` directory in the working directory from which it is executed, typically the `nextflow_cutNrun` directory. These folders contains all subsequent steps in the pipeline, and to understand the finer points of pipeline troubleshooting please see [the Nextflow documenation](https://www.nextflow.io/docs/latest/cache-and-resume.html). These files should not be necessary beyond troubleshooting and caching, and they can be deleted safely once a pipeline has been completed to free up disk space. Note that once removed (either via `rm -r` or `nextflow clean`), however, subsequent pipeline runs cannot be `-resume`d, and if run the pipeline will replace files in the `--out_dir` directory with fresh copies.
+By default, `Nextflow` will generate a `work` directory in the working directory from which it is executed, typically the `nextflow_cutNrun` directory. These folders contains all subsequent steps in the pipeline, and to understand their application and the finer points of pipeline troubleshooting please see [the Nextflow documenation](https://www.nextflow.io/docs/latest/cache-and-resume.html). These files should not be necessary beyond troubleshooting and caching, and they can be deleted safely once a pipeline has been completed to free up disk space. Note that once removed (either via `rm -r` or `nextflow clean`), however, subsequent pipeline runs cannot be `-resume`d, and if run the pipeline will replace files in the `--out_dir` directory with fresh copies.
