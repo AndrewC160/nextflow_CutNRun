@@ -8,12 +8,12 @@ process getSequences {
   publishDir "${params.dir_pool}/${sys_idx}/peaks", mode: 'copy', pattern: "*.fasta"
   
   input:
-    tuple val(sys_idx), val(samp_idx), val(samp_name), val(proj), val(cell_line), val(epitope), val(condition), path(bed_file)
+    tuple val(sys_idx), val(samp_idx), val(samp_name), path(bed_file)
     path genome_fasta
     val prefix
   
   output:
-    tuple val(sys_idx), val(samp_idx), val(samp_name), val(proj), val(cell_line), val(epitope), val(condition), path("${samp_name}_${prefix}.fasta"), emit: "seqs"
+    tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_${prefix}.fasta"), emit: "seqs"
     path "*"
   
   script:

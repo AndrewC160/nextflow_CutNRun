@@ -14,15 +14,15 @@ process peakCallingNarrowPooled {
   publishDir "${params.dir_pool}/${samp_idx}/peaks", mode: 'copy', pattern: "*.narrowPeak"
   
   input:
-    tuple val(sys_idx), val(samp_idx), val(samp_name), val(proj), val(cell_line), val(epitope), val(cond), path(bams_input), path(bams_ctrl)
+    tuple val(sys_idx), val(samp_idx), val(samp_name), path(bams_input), path(bams_ctrl)
     path blacklist_bed
     path seqsize_tsv
   
   output:
-    tuple val(sys_idx), val(samp_idx), val(samp_name), val(proj), val(cell_line), val(epitope), val(cond), path("${samp_name}_peaks.narrowPeak"), emit: "narrowPeaks"
-    tuple val(sys_idx), val(samp_idx), val(samp_name), val(proj), val(cell_line), val(epitope), val(cond), path("${samp_name}_summits.bed"), emit: "summits"
-    tuple val(sys_idx), val(samp_idx), val(samp_name), val(proj), val(cell_line), val(epitope), val(cond), path("${samp_name}_control_lambda.bdg.gz"), path("${samp_name}_control_lambda.bdg.gz.tbi"), emit: "ctrlBDG"
-    tuple val(sys_idx), val(samp_idx), val(samp_name), val(proj), val(cell_line), val(epitope), val(cond), path("${samp_name}_treat_pileup.bdg.gz"), path("${samp_name}_treat_pileup.bdg.gz.tbi"), emit: "treatBDG"
+    tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_peaks.narrowPeak"), emit: "narrowPeaks"
+    tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_summits.bed"), emit: "summits"
+    tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_control_lambda.bdg.gz"), path("${samp_name}_control_lambda.bdg.gz.tbi"), emit: "ctrlBDG"
+    tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_treat_pileup.bdg.gz"), path("${samp_name}_treat_pileup.bdg.gz.tbi"), emit: "treatBDG"
     path "*.txt"
     path "*.tsv"
   

@@ -12,14 +12,14 @@ process readFiltering {
   publishDir "${params.dir_reps}/${samp_name}/align", mode: 'copy', pattern: "*.bai"
   
   input:
-    tuple val(sys_idx), val(samp_idx), val(cond_name), val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path(bam_file)
+    tuple val(sys_idx), val(samp_idx), val(cond_name), val(samp_name),val(epitope), path(bam_file)
     val(gen_nm)
     path(blacklist_bed)
     
   output:
-    tuple val(sys_idx), val(samp_idx), val(cond_name), val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_${gen_nm}.bam"), emit: "filtered"
-    tuple val(sys_idx), val(samp_idx), val(cond_name), val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_${gen_nm}_long.bam"), emit: "filtered_long"
-    tuple val(sys_idx), val(samp_idx), val(cond_name), val(proj), val(samp_name), val(cell_line), val(epitope), val(cond), val(rep), path("${samp_name}_${gen_nm}_short_fastqc.zip"), emit: "fastqc"
+    tuple val(sys_idx), val(samp_idx), val(cond_name), val(samp_name),val(epitope), path("${samp_name}_${gen_nm}.bam"), emit: "filtered"
+    tuple val(sys_idx), val(samp_idx), val(cond_name), val(samp_name),val(epitope), path("${samp_name}_${gen_nm}_long.bam"), emit: "filtered_long"
+    tuple val(sys_idx), val(samp_idx), val(cond_name), val(samp_name),val(epitope), path("${samp_name}_${gen_nm}_short_fastqc.zip"), emit: "fastqc"
     path "*.zip"
     path "*.txt"
     path "*.html"

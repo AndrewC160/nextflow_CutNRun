@@ -8,7 +8,7 @@ process combineSpikes {
     tuple val(samp_idx), val(samp_name), path(spike_files)
   
   output:
-    tuple val(samp_idx), val(samp_name), path("${samp_name}_spike.tsv"), emit: "spikeTable"
+    tuple val(samp_idx), path("${samp_name}_spike.tsv"), emit: "spikeTable"
   
   script:
   tsv_spike = "${samp_name}_spike.tsv"

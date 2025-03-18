@@ -5,10 +5,10 @@ process memeCENTRIMO {
   cpus 1
   memory '16GB'
   
-  publishDir "${params.dir_pool}/${sys_idx}/meme/centrimo", mode: 'copy', pattern: "*"
+  publishDir "${params.dir_pool}/${samp_idx}/meme/centrimo", mode: 'copy', pattern: "*"
   
   input:
-    tuple val(sys_idx), val(samp_idx), val(samp_name), val(proj), val(cell_line), val(epitope), val(condition), path(fasta_file)
+    tuple val(sys_idx), val(samp_idx), val(samp_name), path(fasta_file)
     path motif_file
     val prefix
   

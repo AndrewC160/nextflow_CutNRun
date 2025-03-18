@@ -42,6 +42,7 @@ dependencies:
   - r-ggsci
   - r-grid
   - r-gridextra
+  - r-kableextra
   - r-magrittr
   - r-nloptr
   - r-reactable
