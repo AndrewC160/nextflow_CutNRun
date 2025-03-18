@@ -30,7 +30,7 @@ By default Nextflow will operate within the bounds of the system it is run on (i
 
 ## Execution
 
-The `cutNrun.nf` script is the base script for the pipeline. When run, this script will subsequently call module scripts (stored in the `modules` directory) that contain specific steps for each process. Additional R scripts that will be called are included in the `R` folder, including a parameterized RMarkdown that will be used to generate an output document.
+The `cutNrun.nf` script is the workflow for the pipeline. When run, this script will subsequently call module scripts (stored in the `modules` directory) that contain specific steps for each process. Additional R scripts that will be called are included in the `R` folder, including a parameterized RMarkdown that will be used to generate an output document.
 
 The Nextflow pipeline is executed within the `conda` environment using the command:
 ```
@@ -40,7 +40,7 @@ nextflow run cutNrun.nf \
   --control_epitope <background_epitope>
 ```
 
-At minimum, three parameters should be provided to the nextflow pipeline, as well:
+At minimum, three parameters should be provided to the nextflow pipeline:
 
 `-sample_table`: Filename of the input CSV file containing all sample details.
 
@@ -57,8 +57,12 @@ The primary input of the `cutNrun.nf` pipeline is a CSV file containing one samp
 project | name | cell_line | epitope | condition | replicate | R1 | R2 
 --- | --- | --- | --- | --- | --- | --- |---
 run1 | H358_MYC_WT_1 | H358      | MYC     | WT        |     1     | R1.fastq.gz | R2.fastq.gz
-run1 | H358_MYC_WT_1 | H358      | MYC     | WT        |     2     | R1.fastq.gz | R2.fastq.gz
+run1 | H358_MYC_WT_2 | H358      | MYC     | WT        |     2     | R1.fastq.gz | R2.fastq.gz
 run1 | H358_IgG_WT_1 | H358      | IgG     | WT        |     1     | R1.fastq.gz | R2.fastq.gz
+
+Sample names are expected, but currently output names for replicates and pools are constructed using project/cell line/epitope/condition tags:
+
+- Sample index: <cell_line>_<epitope>_<condition>_<project>
 
 ## Output
 
@@ -68,7 +72,7 @@ For instance, to use IgG background samples from one sequencing project as contr
 ```
 data
 ├── pooled
-│   ├── H358_MYC_WG
+│   ├── H358_MYC_WT
 │   │   ├── meme
 │   │   │   ├── centrimo
 │   │   │   ├── fimo
@@ -85,7 +89,7 @@ data
     │   ├── align
     │   ├── peaks
     │   └── qc
-    └── H358_IgG_WG_1
+    └── H358_IgG_WT_1
         ├── align
         ├── peaks
         └── qc
