@@ -30,13 +30,17 @@ By default Nextflow will operate within the bounds of the system it is run on (i
 
 ### Resources
 
-This pipeline requries several accessory files to run, and these are typically stored in a `resources` directory. This folder can be saved in the `nextflow_cutNrun` directory, or it can be specified using the `--dir_resources` argument. This folder must contain the following:
+This pipeline requries several accessory files to run, and these are typically stored in a `resources` directory. This folder can be saved in the `nextflow_cutNrun` directory, or it can be specified using the `--dir_resources` argument. This folder should contain the following (though specific locations for each can be provided separately):
 
 #### Bowtie2 indices
 
+`--bt2_idx /path/to/bowtie2_index/hg38/hg38` (Primary genome, hg38 for instance)
+
+`--bt2_spike /path/to/bowtie2_index/sac3/sac3` (Spike genome, Sac3 for instance) 
+
 Alignment is performed using [Bowtie2](https://bowtie-bio.sourceforge.net/bowtie2/index.shtml), and so a Bowtie2 index is required for both the sample and spike genomes. [These can be generated manually](https://bowtie-bio.sourceforge.net/bowtie2/manual.shtml#indexing-a-reference-genome), but many pre-built indices are available for download ([here](https://benlangmead.github.io/aws-indexes/bowtie), for instance).
 
-A Bowtie index should consist of a single directory *named after the genome*. Within this directory, substituent bowtie files should have a *prefix that matches the containing folder*. For instance, the Bowtie2 index for the `hg38` genome is:
+A Bowtie index should consist of a single directory *named after the genome*. Within this directory, Bowtie files should all have a *prefix that matches the containing folder*. For instance, the Bowtie2 index for the `hg38` genome is:
 ```
 hg38
 ├── hg38.1.bt2
@@ -47,12 +51,20 @@ hg38
 └── hg38.rev.2.bt2
 ```
 
-The index directory should be provided to the pipeline *with the index prefix* using the `--bt2_idx=/path/to/bowtie2_index/hg38/hg38`.
+The index directories should be provided to the pipeline *with the index prefix* using the  for the primary genome and for spike the genome.
 
+#### Genome FASTA
+
+`--fasta fasta/filename.fa`
+
+Only required if [MEME Suite](https://meme-suite.org/meme/) functions are to be used.
 
 #### Genome blacklists
 
-https://github.com/Boyle-Lab/Blacklist/blob/master/lists/hg38-blacklist.v2.bed.gz
+`--blacklist blacklist_file.bed`
+
+A bedfile of genomic blacklists should be provided. These are available for many genomes [here](https://github.com/Boyle-Lab/Blacklist/blob/master/lists/hg38-blacklist.v2.bed.gz), but keep in mind these files should be unzipped.
+
 
 ## Execution
 
