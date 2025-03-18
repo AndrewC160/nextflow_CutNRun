@@ -68,7 +68,7 @@ Sample names are expected, but currently output names for replicates and pools a
 
 Output file structure is separated into `pooled` and `replicate` folders, with analyses run on individual replicates stored in the latter. Peak calling is performed by [`MACS3`](https://github.com/macs3-project/MACS). For individual replicates, no background is used: signal in a given region is compared to signal across the genome. Note that this is not ideal, particularly in samples with complex genomes. `MACS3` performs pooled peak calling by concatenating all replicates (treatment and background), then calling peaks using background samples to normalize for sequencing biases, copy number, etc. Note that this pipeline runs under the assumption that treatment and background samples should be produced within *the same sequencing run*, *the same cell type*, and *under the same conditions*. To modify this, alter the columns in the input CSV.
 
-For instance, to use IgG background samples from one sequencing project as controls for another project, assign the replicates the same project name. This is not advised, however.
+For instance, to use IgG background samples from one sequencing project as controls for another project, assign the replicates the same project name. This is not advised, however, as background samples should be produced alongside treatment samples.
 ```
 data
 ├── pooled
