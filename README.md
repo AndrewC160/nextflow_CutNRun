@@ -51,7 +51,7 @@ hg38
 └── hg38.rev.2.bt2
 ```
 
-The index directories should be provided to the pipeline *with the index prefix* using the  for the primary genome and for spike the genome.
+The index directories should be provided to the pipeline *with the index prefix* using the for the primary genome and for spike the genome.
 
 #### Genome FASTA
 
@@ -65,6 +65,23 @@ Only required if [MEME Suite](https://meme-suite.org/meme/) functions are to be 
 
 A bedfile of genomic blacklists should be provided. These are available for many genomes [here](https://github.com/Boyle-Lab/Blacklist/blob/master/lists/hg38-blacklist.v2.bed.gz), but keep in mind these files should be unzipped.
 
+#### Seqsizes
+
+`--seqsizes hg38_seqsizes.tsv`
+
+TSV file with two columns: one for chromosome names, another for their length in basepairs. For instance:
+```
+chr1    248956422
+chr2    242193529
+chr3    198295559
+chr4    190214555
+```
+
+#### Motif database
+
+`--motif_db motif_database.meme`
+
+Only required if [MEME Suite](https://meme-suite.org/meme/) functions are used. MEME file, for instance [HOCOMOCO-v12](https://hocomoco12.autosome.org/downloads_v12).
 
 ## Execution
 
