@@ -81,7 +81,13 @@ chr4    190214555
 
 `--motif_db motif_database.meme`
 
-Only required if [MEME Suite](https://meme-suite.org/meme/) functions are used. MEME file, for instance [HOCOMOCO-v12](https://hocomoco12.autosome.org/downloads_v12).
+Only required if [MEME Suite](https://meme-suite.org/meme/) functions are used. MEME file of transcription factor binding motifs to search for, for instance [HOCOMOCO-v12](https://hocomoco12.autosome.org/downloads_v12).
+
+#### Gene annotation GTF
+
+`--gene_gtf hg38_genes.gtf`
+
+GTF file of gene annotations, for instance from [UCSC GoldenPath](https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/hg38.knownGene.gtf.gz) This file should also be bgzipped and indexed.
 
 ## Execution
 
