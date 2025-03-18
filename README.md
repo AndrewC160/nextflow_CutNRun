@@ -60,26 +60,28 @@ run1 | H358_MYC_WT_1 | H358      | MYC     | WT        |     1     | R1.fastq.gz
 run1 | H358_MYC_WT_2 | H358      | MYC     | WT        |     2     | R1.fastq.gz | R2.fastq.gz
 run1 | H358_IgG_WT_1 | H358      | IgG     | WT        |     1     | R1.fastq.gz | R2.fastq.gz
 
-Sample names are expected, but currently output names for replicates and pools are constructed using project/cell line/epitope/condition tags:
+Each replicate should have a unique combination of project/cell_line/epitope/replicate IDs. Sample names are currently allowed, but output names for pools are constructed using project/cell line/epitope/condition tags:
 
-- Sample index: <cell_line>_<epitope>_<condition>_<project>
+- Pool index: `<cell_line>_<epitope>_<condition>_<project>`
 
 ## Output
 
-Output file structure is separated into `pooled` and `replicate` folders, with analyses run on individual replicates stored in the latter. Peak calling is performed by [`MACS3`](https://github.com/macs3-project/MACS). For individual replicates, no background is used: signal in a given region is compared to signal across the genome. Note that this is not ideal, particularly in samples with complex genomes. `MACS3` performs pooled peak calling by concatenating all replicates (treatment and background), then calling peaks using background samples to normalize for sequencing biases, copy number, etc. Note that this pipeline runs under the assumption that treatment and background samples should be produced within *the same sequencing run*, *the same cell type*, and *under the same conditions*. To modify this, alter the columns in the input CSV.
+Output file structure is separated into `pooled` and `replicate` folders, with analyses run on individual replicates stored in the latter. Peak calling is performed by [`MACS3`](https://github.com/macs3-project/MACS). For individual replicates, no background is used: signal in a given region is compared to signal across the genome. This is not ideal, particularly in samples with complex genomes. For pooled peak calling, `MACS3` concatenates all replicates (treatment and background), then calls peaks using background samples to normalize for sequencing biases, copy number, etc. Note that this pipeline runs under the assumption that treatment and background samples should be produced within *the same sequencing run*, *the same cell type*, and *under the same conditions*. To modify this, alter the columns in the input CSV. For instance, to use IgG background samples from one sequencing project as controls for another project, assign the replicates the same project name. This is not advised, however, as background samples should be produced alongside treatment samples.
 
-For instance, to use IgG background samples from one sequencing project as controls for another project, assign the replicates the same project name. This is not advised, however, as background samples should be produced alongside treatment samples.
+Among the outputs for each pool, the `_spike.tsv` file includes read counts as well as the total number of reads aligned to the primary genome vs. the spike genome. This is useful when normalizing signal between samples. The `_report.html` file includes basic quality control metrics as well as 
 ```
 data
 ├── pooled
-│   ├── H358_MYC_WT
+│   ├── H358_MYC_WT_run1
 │   │   ├── meme
 │   │   │   ├── centrimo
 │   │   │   ├── fimo
 │   │   │   └── sea
 │   │   ├── peaks
 │   │   │   └── cuts
-│   │   └── qc
+│   │   ├── qc
+│   │   ├── H358_MYC_WT_spike.tsv
+│   │   └── H358_MYC_WT_run1_report.html
 └── replicates
     ├── H358_MYC_WT_1
     │   ├── align
