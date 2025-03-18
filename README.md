@@ -24,7 +24,11 @@ The environment can then be activated using:
 
 `PATH=$(readlink -e ngsutilsj):$PATH`
 
-This pipeline is also is missing R packages `clugPac`, `ascFunctions`, and `ascCutNRun`. These are not necessary for any steps other than the final report, and they will be updated shortly.
+This pipeline is also is missing R packages `clugPac`, `ascFunctions`, and `ascCutNRun`. These will be updated later, but for now essential functions are included in the R/R_functions directory.
+
+## Configuration
+
+By default Nextflow will operate within the bounds of the system it is run on (i.e. respecting memory/CPU limitations, etc.), but the `nextflow.config` file can be edited to set these limits explicitly. 
 
 ## Execution
 
