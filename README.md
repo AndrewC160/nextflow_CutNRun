@@ -125,6 +125,26 @@ Each replicate should have a unique combination of project/cell_line/epitope/rep
 
 - Pool index: `<cell_line>_<epitope>_<condition>_<project>`
 
+### MEME Suite (Optional)
+
+Enable with `--run_meme true`.
+
+Processes are included for three [MEME Suite](https://meme-suite.org/meme/) functions to detect DNA binding motifs among peak summits. Note that broadPeaks and often narrowPeaks tend to be large enough that many MEME functions are prohibitively slow. The functions currently implemented include:
+
+-[SEA](https://meme-suite.org/meme/tools/sea): Simple Enrichment analysis; determines if any motifs are significantly enriched within peak summits relative to *randomized sequences of the same FASTA*.
+
+-[CENTRIMO](https://meme-suite.org/meme/tools/centrimo): Determine if motifs have a significant preference for a location within peak summits.
+
+-[FIMO](https://meme-suite.org/meme/tools/fimo): Finding Individual Motif Occurences; identifies DNA binding motifs within peak summits.
+
+### Stub files (Optional)
+
+To test/troubleshoot pipeline outputs, "Stub" files can be generated. An optional process will truncate all raw FASTQ files to include a limited number of reads (limit specified via `--trunc_count`) that will process quickly and allow the entire pipeline to run to completion more quickly. For instance, to prepare a stub run using 1 million reads, provide the following two arguments:
+```
+--truncate_fastqs true \
+--truncate_count 1000000
+```
+
 ## Output
 
 Output files are stored in the directory specified using `--dir_out`, within which `pooled` and `replicate` folders will be created. Analyses of pooled samples are stored in the former, individual replicates in the latter. Peak calling is performed by [`MACS3`](https://github.com/macs3-project/MACS). For individual replicates, no background is used: signal in a given region is compared to signal across the genome. This is not ideal, particularly in samples with complex genomes. For pooled peak calling, `MACS3` concatenates all replicates (treatment and background), then calls peaks using background samples to normalize for sequencing biases, copy number, etc. Note that this pipeline runs under the assumption that treatment and background samples should be produced within *the same sequencing run*, *the same cell type*, and *under the same conditions*. To modify this, alter the columns in the input CSV. For instance, to use IgG background samples from one sequencing project as controls for another project, assign the replicates the same project name. This is not advised, however, as background samples should be produced alongside treatment samples.
