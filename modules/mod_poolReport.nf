@@ -3,6 +3,7 @@
 process poolReport {
   tag "${pool_name}"
   publishDir "${params.dir_pool}/${pool_name}", mode: 'copy', pattern: "*.html"
+  publishDir "${params.dir_pool}/${pool_name}", mode: 'copy', pattern: "*.tsv"
   
   input:
     path(r_markdown)
@@ -34,6 +35,7 @@ process poolReport {
   
   output:
     path "${pool_name}_report.html"
+    path "${pool_name}_file_summary.tsv"
   
   script:
   report_file="${pool_name}_report.html"

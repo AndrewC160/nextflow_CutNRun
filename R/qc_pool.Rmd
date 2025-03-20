@@ -60,10 +60,31 @@ knitr::opts_chunk$set(echo = TRUE,fig.width = 10,fig.height = 6,warning = FALSE,
 ```
 
 ```{r loadData}
-param_list  <- lapply(params,function(x) str_split(x,pattern=" ")[[1]])
+param_list    <- lapply(params,function(x) str_split(x,pattern=" ")[[1]])
 project_deets <- str_match(param_list$pool_name,"^([:alnum:]+)_([:alnum:]+)_([:alnum:]+)_(.+)")[2:5] %>% setNames(c("cell_line","epitope","condition","project"))
-tb_samps    <- fread(param_list$sample_table) %>% as_tibble %>% mutate(local = project == project_deets['project']) %>% arrange(project,cell_line,epitope,cond)
+tb_samps      <- fread(param_list$sample_table) %>% as_tibble %>% mutate(local = project == project_deets['project']) %>% arrange(project,cell_line,epitope,cond)
 
+# tb_pool       <- list(
+#   tibble(param_list$bdgs_reps,"reps","treat"),
+#   tibble(param_list$bdgs_reps_ctrl,"reps","ctrl"),
+#   tibble(param_list$bdgs_pool,"pool","treat"),
+#   tibble(param_list$bdgs_pool_ctrl,"pool","ctrl"),
+#   tibble(param_list$npks_pool,"pool","treat"),
+#   tibble(param_list$sums_pool,"pool","summits"),
+#   tibble(param_list$bpks_pool,"pool","treat"),
+#   tibble(param_list$npks_reps,"reps","treat"),
+#   tibble(param_list$bpks_reps,"reps","treat")
+#   ) %>% lapply(function(tb) {
+#     colnames(tb) <- c("file","set","type")
+#     return(tb)
+#   }) %>% do.call(rbind,.) %>%
+#   mutate(set = factor(set,levels=c("pool","reps")),
+#          type = factor(type,levels=c("treat","ctrl")),
+#          name = ifelse(type == "ctrl",
+#                        gsub("_lambda.bdg.gz","",bdg),
+#                        gsub("_pileup.bdg.gz","",bdg)),
+#          samp = gsub("_[^_]+$","",name),
+#          dir = file.path(params$output_dir,"pooled",params$pool_name))
 # Source R functions.
 #sapply(param_list$R_funcs,source)
 sapply(Sys.glob(file.path(param_list$R_dir,"*.R")),source) %>% invisible()
@@ -72,8 +93,37 @@ sapply(Sys.glob(file.path(param_list$R_dir,"*.R")),source) %>% invisible()
 # File tables {.tabset}
 ## Pool
 ```{r listParameters,results='asis'}
-tibble(name  = names(param_list),
-       value = sapply(param_list,paste,collapse=", ")) %>%
+dir_reps<- file.path(param_list$output_dir,"replicates")
+dir_pool<- file.path(param_list$output_dir,"pooled",param_list$pool_name)
+rep_alg <- c("tsv_spike")
+rep_qc  <- c("fastqc_trim1","fastqc_trim2","fastqc_filt","tsvs_frip")
+rep_pks <- c("npks_reps","bpks_reps","bdgs_reps","bdgs_reps_ctrl")
+pool_pks<- c("npks_pool","sums_pool","bdgs_pool","bdgs_pool_ctrl","bpks_pool")
+implicit_sample_dir <- function(fl_nm_in="OS526_K27Ac_KO_1_control_lambda.bdg.gz"){
+  samp_nm <- str_extract(fl_nm_in,"^[:alnum:]+_[:alnum:]+_[:alnum:]+_[:digit:]+")
+  file.path(dir_reps,samp_nm)
+}
+pool_nm   <- str_extract(param_list$pool_name,"^[:alnum:]+_[:alnum:]+_[:alnum:]+")
+
+tb_params <- tibble(
+    field  = names(param_list),
+    value = param_list) %>%
+  as_tibble %>%
+  unnest(value) %>% 
+  add_row(field="pool_name_simple",
+          value=pool_nm) %>%
+  add_row(field="tsv_spike_pooled",
+          value = file.path(dir_pool,paste0(pool_nm,"_spike.tsv"))) %>%
+  mutate(value = 
+    case_when(
+      field %in% rep_alg ~ file.path(implicit_sample_dir(value),"align",value),
+      field %in% rep_qc ~ file.path(implicit_sample_dir(value),"qc",value),
+      field %in% rep_pks ~ file.path(implicit_sample_dir(value),"peaks",value),
+      field %in% pool_pks ~ file.path(dir_pool,"peaks",value),
+      TRUE ~ value)) %T>%
+    fwrite(file=paste0(param_list$pool_name,"_file_summary.tsv"),sep="\t",row.names=FALSE,col.names = TRUE,quote=FALSE)
+
+tb_params %>%
   kable %>%
   kable_styling(full_width=FALSE)
 ```

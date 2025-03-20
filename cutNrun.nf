@@ -22,14 +22,14 @@ params.dir_reps = "${params.dir_out}/replicates"
 params.dir_pool = "${params.dir_out}/pooled"
 
 // Accessory files.
-params.bt2_hg38 = "${params.dir_bowtie}/hg38"
-params.bt2_sac3 = "${params.dir_bowtie}/sac3"
-params.fasta_hg38 = "${params.dir_bowtie}/hg38/hg38.fa"
+params.bt2_idx = "${params.dir_bowtie}/hg38"
+params.bt2_spike = "${params.dir_bowtie}/sac3"
+params.fasta = "${params.dir_bowtie}/hg38/hg38.fa"
 params.blacklist = "${params.dir_resources}/blacklists/hg38-blacklist.bed"
 params.seqsizes = "${params.dir_bowtie}/hg38/hg38_seqsizes.tsv"
 params.motif_db = "${params.dir_resources}/motif_databases/HUMAN/HOCOMOCOv11_core_HUMAN_mono_meme_format.meme"
 params.gene_gtf = "${params.dir_resources}/Homo_sapiens.GRCh38.104.chr.tabix.gtf.gz"
-params.gene_gtf_idx = "${params.dir_resources}/Homo_sapiens.GRCh38.104.chr.tabix.gtf.gz.tbi"
+params.gene_gtf_idx = "${params.gene_gtf}.tbi"
 
 // Modules.
 include { truncateFastQs } from "${params.dir_modules}/mod_truncateFastQs.nf"
@@ -85,10 +85,10 @@ workflow {
   trimming(ch_fastqs)
   
   // Alignment, hg38.
-  alignment_hg38(trimming.out.trimmed,file(params.bt2_hg38))
+  alignment_hg38(trimming.out.trimmed,file(params.bt2_idx))
   
   // Alignment, sac3.
-  alignment_sac3(trimming.out.trimmed,file(params.bt2_sac3))
+  alignment_sac3(trimming.out.trimmed,file(params.bt2_spike))
   
   // Genome assignment.
   ch_bams = alignment_hg38.out.aligned.join(alignment_sac3.out.aligned,by: 0..4)
@@ -176,8 +176,8 @@ workflow {
   }
   if(params.run_meme){
     // Retrieve peak sequences.
-    getSequences_summits(peakCallingNarrowPooled.out.summits,params.fasta_hg38,"summits")
-    getSequences_narrows(peakCallingNarrowPooled.out.narrowPeaks,params.fasta_hg38,"narrowPeaks")
+    getSequences_summits(peakCallingNarrowPooled.out.summits,params.fasta,"summits")
+    getSequences_narrows(peakCallingNarrowPooled.out.narrowPeaks,params.fasta,"narrowPeaks")
     
     // SEA
     memeSEA(getSequences_summits.out.seqs,params.motif_db,"summits")
