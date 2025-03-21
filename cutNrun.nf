@@ -268,6 +268,7 @@ workflow {
     file(params.sample_table),
     params.dir_out,
     file("${params.dir_R}/R_functions/"),
+    file(params.seqsizes),
     file(params.gene_gtf),
     file(params.gene_gtf_idx))
   

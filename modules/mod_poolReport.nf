@@ -30,6 +30,7 @@ process poolReport {
     path(sample_table)
     val(output_dir)
     path(R_dir)
+    path(seqsizes)
     path(gene_gtf)
     path(gene_gtf_idx)
   
@@ -61,6 +62,7 @@ process poolReport {
       bpks_pool="${bpks_pool}",
       sample_table="${sample_table}",
       output_dir="${output_dir}",
+      seqsizes="${seqsizes}",
       gene_gtf="${gene_gtf}",
       R_dir="${R_dir}"
     )

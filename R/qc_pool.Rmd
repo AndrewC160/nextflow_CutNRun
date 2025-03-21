@@ -29,6 +29,7 @@ params:
   bdgs_pool_ctrl: "OS526_K27Ac_KO_control_lambda.bdg.gz"
   bpks_pool: "OS526_K27Ac_KO_peaks.broadPeak"
   gene_gtf: "Homo_sapiens.GRCh38.104.chr.tabix.gtf.gz"
+  seqsizes: "hg38_seqsizes.tsv"
 ---
 
 ```{r setup, include=FALSE}
@@ -46,6 +47,7 @@ library(ggnewscale)
 library(cowplot)
 library(GenomicRanges)
 library(reactable)
+library(regioneR)
 knitr::opts_chunk$set(echo = TRUE)
 
 # Aliases.
@@ -56,38 +58,27 @@ rename  <- dplyr::rename
 o_write <- TRUE
 
 knitr::opts_chunk$set(echo = TRUE,fig.width = 10,fig.height = 6,warning = FALSE,message = FALSE)
+
+###
+##
+#
+
 #knitr::opts_knit$set(root.dir = "/N/p/asclab/ASC-cutNrun/nextflow/report_test")
+
+#
+##
+###
+param_list    <- lapply(params,function(x) str_split(x,pattern=" ")[[1]])
+
+# Source R functions.
+sapply(Sys.glob(file.path(param_list$R_dir,"*.R")),source) %>% invisible()
 ```
 
 ```{r loadData}
-param_list    <- lapply(params,function(x) str_split(x,pattern=" ")[[1]])
 project_deets <- str_match(param_list$pool_name,"^([:alnum:]+)_([:alnum:]+)_([:alnum:]+)_(.+)")[2:5] %>% setNames(c("cell_line","epitope","condition","project"))
 tb_samps      <- fread(param_list$sample_table) %>% as_tibble %>% mutate(local = project == project_deets['project']) %>% arrange(project,cell_line,epitope,cond)
-
-# tb_pool       <- list(
-#   tibble(param_list$bdgs_reps,"reps","treat"),
-#   tibble(param_list$bdgs_reps_ctrl,"reps","ctrl"),
-#   tibble(param_list$bdgs_pool,"pool","treat"),
-#   tibble(param_list$bdgs_pool_ctrl,"pool","ctrl"),
-#   tibble(param_list$npks_pool,"pool","treat"),
-#   tibble(param_list$sums_pool,"pool","summits"),
-#   tibble(param_list$bpks_pool,"pool","treat"),
-#   tibble(param_list$npks_reps,"reps","treat"),
-#   tibble(param_list$bpks_reps,"reps","treat")
-#   ) %>% lapply(function(tb) {
-#     colnames(tb) <- c("file","set","type")
-#     return(tb)
-#   }) %>% do.call(rbind,.) %>%
-#   mutate(set = factor(set,levels=c("pool","reps")),
-#          type = factor(type,levels=c("treat","ctrl")),
-#          name = ifelse(type == "ctrl",
-#                        gsub("_lambda.bdg.gz","",bdg),
-#                        gsub("_pileup.bdg.gz","",bdg)),
-#          samp = gsub("_[^_]+$","",name),
-#          dir = file.path(params$output_dir,"pooled",params$pool_name))
-# Source R functions.
-#sapply(param_list$R_funcs,source)
-sapply(Sys.glob(file.path(param_list$R_dir,"*.R")),source) %>% invisible()
+gr_genes      <- gtf_to_genes(params$gene_gtf,cache_file = "genes.tsv")
+gr_chroms     <- get_seqsizes(seqsize_file = param_list$seqsizes,as_granges = TRUE)
 ```
 
 # File tables {.tabset}
@@ -566,6 +557,113 @@ plot_grid(p1,p2,ncol=1,align='v',axis='lr',rel_heights = c(5,3))
 # Peak calling {.tabset}
 
 For individual samples, peaks are called using the genome-wide median as a background.
+
+## Enrichment {.tabset}
+
+Assuming that measured peaks are real, we expect them to fall on or near promoters (within 10kb of a TSS) or enhancers (within 500kb of a TSS). In the following plots, the distance between each peak and its nearest TSS is calculated and binned. To determine if these values are *significant*, we compare them to a *random distribution of the same peaks*. For every peak, we randomize its location (but not size) within the genome 20 times and measure its distance from a TSS each time. The red segments/curves thus show a normal distribution: i.e., how far do most peaks fall from a TSS if they are distributed randomly. Fold enrichment of measured data is then calculated as the ratio of **real values / randomized values**, and labeled on top of each bar. A value of 2x, for instance, indicates that peaks are *twice as likely to fall in a given bin than expected by chance*, while a value of 1x indicates that we would expect the same result if peaks were random, i.e. not enriched. In most cases, if no bins are substantially greater than 1, we may expect the dataset to be problematic.
+```{r }
+tally_nearest <- function(peaks_in,regions_in,brks,brk_nms){
+  distanceToNearest(peaks_in,regions_in) %>%
+    as_tibble %>%
+    left_join(
+      as_tibble(peaks_in) %>% select(seqnames,start,end) %>% rename_all(function(x) paste0("peak_",x)) %>% mutate(queryHits=row_number()),
+      by="queryHits"
+    ) %>%
+    left_join(
+      as_tibble(regions_in) %>% select(seqnames,start,end,strand) %>% rename_all(function(x) paste0("gene_",x)) %>% mutate(subjectHits=row_number()),
+      by="subjectHits"
+    ) %>%
+    mutate(distance = case_when(gene_strand == "+" & peak_end < gene_start ~ -distance,
+                                gene_strand == "-" & peak_start > gene_end ~ -distance,
+                                TRUE ~ distance),
+           bin = cut(distance,breaks = brks,include.lowest = TRUE,labels = brk_nms)) %>%
+    group_by(bin) %>%
+    tally(name='count') %>%
+    ungroup %>%
+    mutate(frac = count/sum(count)) %>%
+    return()
+}
+bootstrap_enrichment <- function(peaks_in,regions_in,brks_in,brk_nms_in,iters=10,genome_in=gr_chroms){
+  gr_rand <- randomize_grange(peaks_in,max_sample = Inf,sample_num = iters,genome_in = genome_in)
+  
+  rbind(
+    tally_nearest(peaks_in,regions_in,brks = brks_in,brk_nms=brk_nms_in) %>% mutate(name = "real"),
+    tally_nearest(gr_rand,regions_in,brks = brks_in, brk_nms=brk_nms_in) %>% mutate(name = "rand",count=count/iters)
+  ) %>%
+    pivot_wider(id_cols = bin,names_from = name,values_from = c(count,frac),values_fill = 0) %>%
+    mutate(ratio_frac = frac_real/frac_rand,
+           ratio_count = count_real /  count_rand,
+           name = peaks_in$name[1]) %>%
+    return()
+}
+plot_peak_enrichment <- function(peak_fls,chrom_gr=gr_chroms,iterations=20){
+ brks <- c(-Inf,-1E6,-5E5,-1E5,-5E4,-1E4,1E4,5E4,1E5,5E5,1E6,Inf)
+brk_nms <- c(
+  ">1MB",
+  "1MB-500kb",
+  "500kb-100kb",
+  "100kb-50kb",
+  "50kb-10kb",
+  "TSS +/-10kb",
+  "10kb-50kb",
+  "50kb-100kb",
+  "100kb-500kb",
+  "500kb-1MB",
+  ">1MB") %>%
+  paste0(c(rep(" upstream",5),"",rep(" downstream",5)))
+  
+  tb_enr<- lapply(names(peak_fls),function(nm) {
+      read_peak_file(peak_fls[[nm]]) %>%
+        filter(seqnames %in% seqlevels(chrom_gr)) %>%
+        makeGRangesFromDataFrame %>%
+        reduce %>%
+        bootstrap_enrichment(
+          regions_in = promoters(gr_genes,upstream=1,downstream=0),
+          brks_in = brks,
+          brk_nms_in = brk_nms,
+          genome_in = chrom_gr,
+          iters=iterations) %>%
+        mutate(name = nm)
+    }) %>% do.call(rbind,.)
+    
+  ggplot(tb_enr,aes(x=bin,y=count_real,label=paste0(round(ratio_frac,digits=1),"x\n"))) +
+    facet_wrap(.~name,ncol=1,scales="free_y",strip.position = "right") +
+    scale_x_discrete(labels = function(x) gsub(" ","\n",x)) +
+    scale_y_continuous(name="Peaks",expand=expansion(mult=c(0,0.2)),labels=prettyNumbers) +
+    geom_ribbon(mapping=aes(x=bin,ymax=count_rand,ymin=0,group="group"),color="red",fill="black",alpha=0.2) +
+    geom_ribbon(mapping=aes(x=bin,ymax=count_real,ymin=0,group="group"),color="black",fill="black",alpha=0) +
+    geom_bar(stat='identity',color="black") +
+    geom_segment(mapping=aes(x=as.integer(bin)-0.15,xend=as.integer(bin)+0.15,
+                             y=count_rand,yend=count_rand),
+                 color='red') +
+    geom_text(size=2) +
+    ggtitle("Distance to nearest TSS",subtitle=paste("Mean among",iterations,"randomized iterations in red.")) +
+    theme(plot.background = element_rect(fill="white",color=NA),
+          plot.subtitle = element_text(face="italic"),
+          panel.background = element_blank(),
+          panel.border = element_rect(fill=NA,color="black",linewidth=0.5),
+          panel.grid = element_blank(),
+          axis.text.x = element_text(size=4,angle=45,hjust=1,vjust=1),
+          axis.ticks.x = element_blank(),
+          axis.title.x = element_blank(),
+          strip.background = element_blank(),
+          strip.text.y.right = element_text(angle=0,hjust=0,size=6))
+}
+```
+
+### narrowPeaks
+```{r fig.height=6,fig.width=8}
+c(param_list$npks_pool,param_list$npks_reps) %>%
+  setNames(gsub("_peaks.narrowPeak","",.)) %>%
+  plot_peak_enrichment
+```
+
+### broadPeaks
+```{r fig.height=6,fig.width=8}
+c(param_list$bpks_pool,param_list$bpks_reps) %>% 
+  setNames(gsub("_peaks.broadPeak","",.)) %>%
+  plot_peak_enrichment
+```
 
 ## FRiP
 ```{r indPeakcalling,height=4,width=6}
