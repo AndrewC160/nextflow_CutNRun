@@ -2,7 +2,7 @@
 
 [Nextflow](https://github.com/nextflow-io/nextflow) is a popular scripting language that allows for tasks (defined as "processes") to be defined with inputs (dependencies) and outputs, and subsequent tasks that operate on these outputs will be run once all dependencies are ready. Tasks are parallellized, and a failed pipeline can be `-resume`d to pick up where it left off. In the event a script along the pipeline is changed or an input is altered, the process(es) that use that script/input will be repeated with the updated code/inputs. Nextflow is a widely used and readily available system that can be easily shared.
 
-![cutNrun_nextflow_pipeline](https://github.com/user-attachments/assets/b610e71e-22db-477b-b462-14b069277dbf)
+![cutNrun_nextflow_pipeline](https://github.com/user-attachments/assets/7d67be6b-7783-4755-a433-e7c5ede869a9)
 
 ## Installation
 
@@ -22,7 +22,7 @@ The environment can then be activated using:
 
 `PATH=$(readlink -e ngsutilsj):$PATH`
 
-This pipeline is also is missing R packages `clugPac`, `ascFunctions`, and `ascCutNRun`. These will be updated later, but for now essential functions are included in the R/R_functions directory.
+This pipeline is also missing R packages `clugPac`, `ascFunctions`, and `ascCutNRun`. These will be updated later, but for now essential functions are included in the R/R_functions directory.
 
 ## Configuration
 
@@ -129,7 +129,7 @@ Each replicate should have a unique combination of project/cell_line/epitope/rep
 
 Enable with `--run_meme true`.
 
-Processes are included for three [MEME Suite](https://meme-suite.org/meme/) functions to detect DNA binding motifs among peak summits. Note that broadPeaks and often narrowPeaks tend to be large enough that many MEME functions are prohibitively slow. The functions currently implemented include:
+Processes are included for three [MEME Suite](https://meme-suite.org/meme/) functions to detect DNA binding motifs among peak summits. Note that broadPeaks and often narrowPeaks can be large enough that many MEME functions are prohibitively slow. The functions currently implemented include:
 
 -[SEA](https://meme-suite.org/meme/tools/sea): Simple Enrichment analysis; determines if any motifs are significantly enriched within peak summits relative to *randomized sequences of the same FASTA*.
 
@@ -149,7 +149,7 @@ To test/troubleshoot pipeline outputs, "Stub" files can be generated. An optiona
 
 Output files are stored in the directory specified using `--dir_out`, within which `pooled` and `replicate` folders will be created. Analyses of pooled samples are stored in the former, individual replicates in the latter. Peak calling is performed by [`MACS3`](https://github.com/macs3-project/MACS). For individual replicates, no background is used: signal in a given region is compared to signal across the genome. This is not ideal, particularly in samples with complex genomes. For pooled peak calling, `MACS3` concatenates all replicates (treatment and background), then calls peaks using background samples to normalize for sequencing biases, copy number, etc. Note that this pipeline runs under the assumption that treatment and background samples should be produced within *the same sequencing run*, *the same cell type*, and *under the same conditions*. To modify this, alter the columns in the input CSV. For instance, to use IgG background samples from one sequencing project as controls for another project, assign the replicates the same project name. This is not advised, however, as background samples should be produced alongside treatment samples.
 
-Among the outputs for each pool, the `_spike.tsv` file includes read counts as well as the total number of reads aligned to the primary genome vs. the spike genome. This is useful when normalizing signal between samples. The `_report.html` file includes basic quality control metrics as well as 
+Among the outputs for each pool, the `_spike.tsv` file includes read counts as well as the total number of reads aligned to the primary genome vs. the spike genome. This is useful when normalizing signal between samples. The `_report.html` file includes basic quality control metrics and plots of pileup among high-scoring peaks, and the `_file_summary.tsv` file contains output file locations.
 ```
 data
 ├── pooled
@@ -162,6 +162,7 @@ data
 │   │   │   └── cuts
 │   │   ├── qc
 │   │   ├── H358_MYC_WT_spike.tsv
+│   │   ├── H358_MYC_WT_run1_file_summary.tsv
 │   │   └── H358_MYC_WT_run1_report.html
 └── replicates
     ├── H358_MYC_WT_1
