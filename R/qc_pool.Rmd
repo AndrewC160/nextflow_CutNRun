@@ -48,6 +48,7 @@ library(cowplot)
 library(GenomicRanges)
 library(reactable)
 library(regioneR)
+library(Rsamtools)
 knitr::opts_chunk$set(echo = TRUE)
 
 # Aliases.
@@ -76,8 +77,11 @@ sapply(Sys.glob(file.path(param_list$R_dir,"*.R")),source) %>% invisible()
 
 ```{r loadData}
 project_deets <- str_match(param_list$pool_name,"^([:alnum:]+)_([:alnum:]+)_([:alnum:]+)_(.+)")[2:5] %>% setNames(c("cell_line","epitope","condition","project"))
-tb_samps      <- fread(param_list$sample_table) %>% as_tibble %>% mutate(local = project == project_deets['project']) %>% arrange(project,cell_line,epitope,cond)
-gr_genes      <- gtf_to_genes(params$gene_gtf,cache_file = "genes.tsv")
+tb_samps      <- fread(param_list$sample_table) %>%
+  as_tibble %>% 
+  mutate(local = project == project_deets['project']) %>% 
+  arrange(project,cell_line,epitope,cond)
+gr_genes      <- gtf_to_genes(gtf_file = params$gene_gtf,cache_file = "genes.tsv")
 gr_chroms     <- get_seqsizes(seqsize_file = param_list$seqsizes,as_granges = TRUE)
 ```
 
@@ -166,53 +170,59 @@ fq_raw  <- lapply(names(fq_raw1), function(nm){
 
 ### Flag summary
 ```{r fastqcSummary,fig.height=6,fig.width=6}
-tb_p  <- fq_raw$summary %>%
-  mutate(name = gsub("_val_[12]$","",name)) %>%
-  separate(name,into=c("cell_line","epitope","cond","rep"),sep = "_",remove = FALSE) %>%
-  select(-cond) %>%
-  mutate(cell_line = factor(cell_line),
-         epitope = factor(epitope,levels=c("KLF5","IgG")),
-         read = factor(read),
-         rep = factor(rep),
-         flag = factor(flag,levels=c("pass","warn","fail")),
-         title = factor(title),
-         idx = row_number()) %>%
-  rowwise %>%
-  mutate(x = ifelse(read == "R1",list(c(0,1,0)),list(c(0,1,1))),
-         y = ifelse(read == "R1",list(c(1,1,0)),list(c(0,1,0)))) %>%
-  ungroup %>%
-  unnest(c(x,y)) %>%
-  mutate(x = x + (as.integer(rep)-1),
-         y = y + (as.integer(title)-1))
-
-y_labs  <- levels(tb_p$title)
-y_labs  <- setNames(c(1:length(y_labs))-0.5,y_labs)
-x_labs  <- levels(tb_p$rep)
-x_labs  <- setNames(c(1:length(x_labs))-0.5,x_labs)
-
-ggplot(tb_p,aes(x=x,y=y,group=idx,fill=flag)) +
-  facet_wrap(.~cell_line,
-             nrow=1,
-             scales = "free_x") +
-  scale_x_continuous(name = "Replicate",
-                     expand=c(0,0),
-                     breaks=x_labs,
-                     labels = names(x_labs)) +
-  scale_y_reverse(expand=c(0,0),
-                     breaks = y_labs,
-                     labels = names(y_labs))+
-  scale_fill_manual(values=c(pass="lightgreen",
-                             warn="orange",
-                             fail="firebrick")) +
-  geom_polygon(color="black") +
-  annotate(geom = "text",x=0.05,y=0.95,hjust=0,vjust=0,label="R1",size=2.5) +
-  annotate(geom = "text",x=0.95,y=0.05,hjust=1,vjust=1,label="R2",size=2.5) +
-  ggtitle("Raw reads") +
-  theme_minimal() +
-  theme(axis.title.y = element_blank(),
-        legend.title = element_blank(),
-        plot.background= element_rect(fill="white",color=NA))
+p_file<- file.path("fastqc_flags_trimmed.png")
+if(!file.exists(p_file)){
+  tb_p  <- fq_raw$summary %>%
+    mutate(name = gsub("_val_[12]$","",name)) %>%
+    separate(name,into=c("cell_line","epitope","cond","rep"),sep = "_",remove = FALSE) %>%
+    select(-cond) %>%
+    mutate(cell_line = factor(cell_line),
+           epitope = factor(epitope,levels=c("KLF5","IgG")),
+           read = factor(read),
+           rep = factor(rep),
+           flag = factor(flag,levels=c("pass","warn","fail")),
+           title = factor(title),
+           idx = row_number()) %>%
+    rowwise %>%
+    mutate(x = ifelse(read == "R1",list(c(0,1,0)),list(c(0,1,1))),
+           y = ifelse(read == "R1",list(c(1,1,0)),list(c(0,1,0)))) %>%
+    ungroup %>%
+    unnest(c(x,y)) %>%
+    mutate(x = x + (as.integer(rep)-1),
+           y = y + (as.integer(title)-1))
+  
+  y_labs  <- levels(tb_p$title)
+  y_labs  <- setNames(c(1:length(y_labs))-0.5,y_labs)
+  x_labs  <- levels(tb_p$rep)
+  x_labs  <- setNames(c(1:length(x_labs))-0.5,x_labs)
+  
+  p <- ggplot(tb_p,aes(x=x,y=y,group=idx,fill=flag)) +
+    facet_wrap(.~cell_line,
+               nrow=1,
+               scales = "free_x") +
+    scale_x_continuous(name = "Replicate",
+                       expand=c(0,0),
+                       breaks=x_labs,
+                       labels = names(x_labs)) +
+    scale_y_reverse(expand=c(0,0),
+                       breaks = y_labs,
+                       labels = names(y_labs))+
+    scale_fill_manual(values=c(pass="lightgreen",
+                               warn="orange",
+                               fail="firebrick")) +
+    geom_polygon(color="black",linewidth=0.25) +
+    annotate(geom = "text",x=0.05,y=0.95,hjust=0,vjust=0,label="R1",size=2.5) +
+    annotate(geom = "text",x=0.95,y=0.05,hjust=1,vjust=1,label="R2",size=2.5) +
+    ggtitle("Raw reads") +
+    theme_minimal() +
+    theme(axis.title.y = element_blank(),
+          legend.title = element_blank(),
+          plot.background= element_rect(fill="white",color=NA))
+  ggsave(p_file,p,'png',dpi=300,height=6,width=3 + 0.5*length(unique(tb_p$name)))
+}
 ```
+
+![](`r p_file`)
 
 ### FastQ Reads
 ```{r tableStats}
@@ -237,66 +247,46 @@ tb_stats %>%
   kable_styling(full_width=FALSE)
 ```
 ```{r plotFastqReads,fig.width=5,fig.height=5}
-ggplot(tb_stats,aes(x=name,y=total_sequences,fill=epitope,label=paste0(prettyNumbers(total_sequences,digs = 1),"\n"))) +
-  facet_wrap(.~cell_line,scales="free_x",nrow=1) +
-  scale_y_continuous(labels = prettyNumbers,name="Reads",expand=expansion(mult=c(0,0.1))) +
-  geom_bar(stat='identity',position = "dodge",color='black',linewidth=0.5) +
-  geom_text(size=2) +
-  ggtitle("FastQ read counts",subtitle= "Unfiltered") +
-  theme(plot.background = element_rect(fill="white",color=NA),
-        plot.subtitle = element_text(face="italic"),
-        panel.background = element_blank(),
-        panel.border = element_rect(fill = NA,color='black'),
-        panel.grid.major.x = element_blank(),
-        panel.grid.major.y = element_line(linewidth=0.5,color="gray80"),
-        legend.title = element_blank(),
-        axis.text.x = element_text(angle=45,hjust=1,vjust=1,size=5),
-        axis.ticks.x = element_blank(),
-        strip.background = element_blank(),
-        axis.title.x = element_blank())
+p_file <- file.path("fastqc_readCounts_trimmed.png")
+if(!file.exists(p_file)){
+  p <- ggplot(tb_stats,aes(x=name,y=total_sequences,fill=epitope,label=paste0(prettyNumbers(total_sequences,digs = 1),"\n"))) +
+    facet_wrap(.~cell_line,scales="free_x",nrow=1) +
+    scale_y_continuous(labels = prettyNumbers,name="Reads",expand=expansion(mult=c(0,0.1))) +
+    geom_bar(stat='identity',position = "dodge",color='black',linewidth=0.5) +
+    geom_text(size=2) +
+    ggtitle("FastQ read counts",subtitle= "Unfiltered") +
+    theme(plot.background = element_rect(fill="white",color=NA),
+          plot.subtitle = element_text(face="italic"),
+          panel.background = element_blank(),
+          panel.border = element_rect(fill = NA,color='black'),
+          panel.grid.major.x = element_blank(),
+          panel.grid.major.y = element_line(linewidth=0.5,color="gray80"),
+          legend.title = element_blank(),
+          axis.text.x = element_text(angle=45,hjust=1,vjust=1,size=5),
+          axis.ticks.x = element_blank(),
+          strip.background = element_blank(),
+          axis.title.x = element_blank())
+  ggsave(p_file,p,'png',dpi=300,height=4,width=2 + length(unique(tb_stats$name)))
+}
 ```
+
+![](`r p_file`)
 
 ### Per-base quality scores
 ```{r plotPerBaseSequenceQuality,fig.width=10,fig.height=4}
-tb_p <- fq_raw$per_base_sequence_quality %>%
-  mutate(base = ifelse(read == "R2",-base,base),
-         name = gsub("_val_[12]$","",name))
-
-ggplot(tb_p,aes(x=base,y=mean,color=name)) +
-  facet_wrap(.~read,nrow=1,scales="free_x") +
-  scale_x_continuous(name="Base (bp)",expand=c(0,0),labels=abs) + 
-  scale_y_continuous(name="Quality score") +
-  geom_line() +
-  ggtitle("Per-base quality scores",subtitle= "Unfiltered") +
-  theme(plot.background = element_rect(fill="white",color=NA),
-        plot.subtitle = element_text(face="italic"),
-        panel.background = element_blank(),
-        panel.border = element_rect(fill = NA,color='black'),
-        panel.grid.major.x = element_blank(),
-        panel.grid.major.y = element_line(linewidth=0.5,color="gray80"),
-        legend.title = element_blank(),
-        axis.ticks.x = element_blank(),
-        strip.background = element_blank())
-```
-
-### Per-base sequence content
-```{r perBaseSequenceContent,fig.height=6,fig.width=8}
-tb_p <- fq_raw$per_base_sequence_content %>%
-  mutate(name = gsub("_val_[12]$","",name),
-         base = ifelse(read == "R2",-base,base)) %>%
-  as_tibble %>%
-  left_join(select(tb_samps,name,cell_line,epitope,rep),by="name") %>%
-  mutate(cond = paste(cell_line,rep)) %>%
-  rename(position = base) %>%
-  pivot_longer(cols=c(a,c,g,t),names_to = "base",values_to="percent")
-
-ggplot(tb_p,aes(x=position,y=percent,color=cond,linetype=base)) +
-  facet_grid(rows=vars(epitope),cols=vars(read),scales="free_x") +
-  scale_x_continuous(name="Base",expand=c(0,0),labels=abs) +
-  scale_y_continuous(name="Percent",labels = function(x) paste0(x,"%")) +
-  geom_line() +
-  ggtitle("Per-base sequence content",subtitle="Unfiltered") +
-  theme(plot.background = element_rect(fill="white",color=NA),
+p_file <- file.path("fastqc_perBaseQScore_trimmed.png")
+if(!file.exists(p_file)){
+  tb_p <- fq_raw$per_base_sequence_quality %>%
+    mutate(base = ifelse(read == "R2",-base,base),
+           name = gsub("_val_[12]$","",name))
+  
+  p <- ggplot(tb_p,aes(x=base,y=mean,color=name)) +
+    facet_wrap(.~read,nrow=1,scales="free_x") +
+    scale_x_continuous(name="Base (bp)",expand=c(0,0),labels=abs) + 
+    scale_y_continuous(name="Quality score") +
+    geom_line() +
+    ggtitle("Per-base quality scores",subtitle= "Unfiltered") +
+    theme(plot.background = element_rect(fill="white",color=NA),
           plot.subtitle = element_text(face="italic"),
           panel.background = element_blank(),
           panel.border = element_rect(fill = NA,color='black'),
@@ -305,23 +295,32 @@ ggplot(tb_p,aes(x=position,y=percent,color=cond,linetype=base)) +
           legend.title = element_blank(),
           axis.ticks.x = element_blank(),
           strip.background = element_blank())
+  ggsave(p_file,p,'png',dpi=300,height=3,width=8)
+}
 ```
 
-### Per-sequence GC content
-```{r perSequenceGCContent,fig.height=6,fig.width=8}
-tb_p  <- fq_raw$per_sequence_gc_content %>%
-  mutate(name = gsub("_val_[12]$","",name),
-         read = factor(read)) %>% 
-  left_join(select(tb_samps,name,cell_line,epitope,rep),by="name") %>%
-  mutate(name = paste(cell_line,rep))
+![](`r p_file`)
 
-ggplot(tb_p,aes(x=gc_content,y=count,color=name,group=name)) +
-  facet_grid(rows=vars(epitope),cols=vars(read),scales="free") +
-  scale_x_continuous(name = "GC content",labels=function(x) paste0(x,"%")) +
-  scale_y_continuous(name = "Reads",labels=prettyNumbers) +
-  geom_line() +
-  ggtitle("Per-sequence GC content",subtitle="Unfiltered") +
-  theme(plot.background = element_rect(fill="white",color=NA),
+### Per-base sequence content
+```{r perBaseSequenceContent,fig.height=6,fig.width=8}
+p_file <- file.path("fastqc_perBaseSequenceContent_trimmed.png")
+if(!file.exists(p_file)){
+  tb_p <- fq_raw$per_base_sequence_content %>%
+    mutate(name = gsub("_val_[12]$","",name),
+           base = ifelse(read == "R2",-base,base)) %>%
+    as_tibble %>%
+    left_join(select(tb_samps,name,cell_line,epitope,rep),by="name") %>%
+    mutate(cond = paste(cell_line,rep)) %>%
+    rename(position = base) %>%
+    pivot_longer(cols=c(a,c,g,t),names_to = "base",values_to="percent")
+  
+  p <- ggplot(tb_p,aes(x=position,y=percent,color=cond,linetype=base)) +
+    facet_grid(rows=vars(epitope),cols=vars(read),scales="free_x") +
+    scale_x_continuous(name="Base",expand=c(0,0),labels=abs) +
+    scale_y_continuous(name="Percent",labels = function(x) paste0(x,"%")) +
+    geom_line() +
+    ggtitle("Per-base sequence content",subtitle="Unfiltered") +
+    theme(plot.background = element_rect(fill="white",color=NA),
             plot.subtitle = element_text(face="italic"),
             panel.background = element_blank(),
             panel.border = element_rect(fill = NA,color='black'),
@@ -330,7 +329,44 @@ ggplot(tb_p,aes(x=gc_content,y=count,color=name,group=name)) +
             legend.title = element_blank(),
             axis.ticks.x = element_blank(),
             strip.background = element_blank())
+  
+  ggsave(p_file,p,'png',dpi=300,height=3,width=8)
+}
 ```
+
+![](`r p_file`)
+
+### Per-sequence GC content
+```{r perSequenceGCContent,fig.height=6,fig.width=8}
+p_file <- file.path("fastqc_perSequenceGC_trimmed.png")
+if(!file.exists(p_file)){
+  tb_p  <- fq_raw$per_sequence_gc_content %>%
+    mutate(name = gsub("_val_[12]$","",name),
+           read = factor(read)) %>% 
+    left_join(select(tb_samps,name,cell_line,epitope,rep),by="name") %>%
+    mutate(name = paste(cell_line,rep))
+  
+  p <-ggplot(tb_p,aes(x=gc_content,y=count,color=name,group=name)) +
+    facet_grid(rows=vars(epitope),cols=vars(read),scales="free") +
+    scale_x_continuous(name = "GC content",labels=function(x) paste0(x,"%")) +
+    scale_y_continuous(name = "Reads",labels=prettyNumbers) +
+    geom_line() +
+    ggtitle("Per-sequence GC content",subtitle="Unfiltered") +
+    theme(plot.background = element_rect(fill="white",color=NA),
+              plot.subtitle = element_text(face="italic"),
+              panel.background = element_blank(),
+              panel.border = element_rect(fill = NA,color='black'),
+              panel.grid.major.x = element_blank(),
+              panel.grid.major.y = element_line(linewidth=0.5,color="gray80"),
+              legend.title = element_blank(),
+              axis.ticks.x = element_blank(),
+              strip.background = element_blank())
+    
+  ggsave(p_file,p,'png',dpi=300,height=3,width=8)
+}
+```
+
+![](`r p_file`)
 
 ## Aligned & filtered {.tabset}
 ```{r fastqcReadFilt}
@@ -339,30 +375,36 @@ fq_hg38 <- read_fastqc(param_list$fastqc_filt)
 
 ### Flag summary
 ```{r fastqcSummaryFilt,fig.height=6,fig.width=6}
-tb_p  <- fq_hg38$summary %>%
-  mutate(name = gsub("_hg38_short$","",name)) %>%
-  separate(name,into=c("cell_line","epitope","cond","rep"),sep = "_",remove = FALSE) %>%
-  select(-cond) %>%
-  mutate(cell_line = factor(cell_line),
-         epitope = factor(epitope,levels=c("KLF5","IgG")),
-         rep = factor(rep),
-         flag = factor(flag,levels=c("pass","warn","fail")),
-         title = factor(title,levels=select(.,title) %>% unlist %>% unique %>% sort %>% rev))
-
-ggplot(tb_p,aes(x=rep,y=title,fill=flag)) +
-  facet_wrap(.~cell_line,nrow=1) +
-  scale_x_discrete(name="Replicates") +
-  scale_fill_manual(values=c(pass="lightgreen",
-                             warn="orange",
-                             fail="firebrick")) +
-  geom_tile(color="black") +
-  ggtitle("Filtered reads") +
-  theme_minimal() +
-  theme(axis.title.y = element_blank(),
-        legend.title = element_blank(),
-        plot.background= element_rect(fill="white",color=NA),
-        panel.grid = element_blank())
+p_file <- file.path("fastqc_flags_filtered.png")
+if(!file.exists(p_file)){
+  tb_p  <- fq_hg38$summary %>%
+    mutate(name = gsub("_hg38_short$","",name)) %>%
+    separate(name,into=c("cell_line","epitope","cond","rep"),sep = "_",remove = FALSE) %>%
+    select(-cond) %>%
+    mutate(cell_line = factor(cell_line),
+           epitope = factor(epitope,levels=c("KLF5","IgG")),
+           rep = factor(rep),
+           flag = factor(flag,levels=c("pass","warn","fail")),
+           title = factor(title,levels=select(.,title) %>% unlist %>% unique %>% sort %>% rev))
+  
+  p <- ggplot(tb_p,aes(x=rep,y=title,fill=flag)) +
+    facet_wrap(.~cell_line,nrow=1) +
+    scale_x_discrete(name="Replicates") +
+    scale_fill_manual(values=c(pass="lightgreen",
+                               warn="orange",
+                               fail="firebrick")) +
+    geom_tile(color="black") +
+    ggtitle("Filtered reads") +
+    theme_minimal() +
+    theme(axis.title.y = element_blank(),
+          legend.title = element_blank(),
+          plot.background= element_rect(fill="white",color=NA),
+          panel.grid = element_blank())
+  ggsave(p_file,p,'png',dpi=300,height=6,width=3 + 0.5*length(unique(tb_p$name)))
+}
 ```
+
+![](`r p_file`)
 
 ### FastQ Reads
 ```{r tableStatsFilt}
@@ -410,43 +452,17 @@ ggplot(tb_stats,aes(x=name,y=total_sequences,fill=epitope,label=paste0(prettyNum
 
 ### Per-base quality scores
 ```{r plotPerBaseSequenceQualityFilt,fig.width=8,fig.height=4}
-tb_p <- fq_hg38$per_base_sequence_quality %>%
-  mutate(name = gsub("_hg38_short$","",name))
-
-ggplot(tb_p,aes(x=base,y=mean,color=name)) +
-  scale_x_continuous(name="Base (bp)",expand=c(0,0),labels=abs) + 
-  scale_y_continuous(name="Quality score") +
-  geom_line() +
-  ggtitle("Per-base quality scores",subtitle= "Filtered") +
-  theme(plot.background = element_rect(fill="white",color=NA),
-        plot.subtitle = element_text(face="italic"),
-        panel.background = element_blank(),
-        panel.border = element_rect(fill = NA,color='black'),
-        panel.grid.major.x = element_blank(),
-        panel.grid.major.y = element_line(linewidth=0.5,color="gray80"),
-        legend.title = element_blank(),
-        axis.ticks.x = element_blank(),
-        strip.background = element_blank())
-```
-
-
-### Per-base sequence content
-```{r perBaseSequenceContentFilt,fig.width=8,fig.height=5}
-tb_p <- fq_hg38$per_base_sequence_content %>%
-  mutate(name = gsub("_hg38_short$","",name)) %>%
-  as_tibble %>%
-  left_join(select(tb_samps,name,cell_line,epitope,rep),by="name") %>%
-  mutate(cond = paste(cell_line,rep)) %>%
-  rename(position = base) %>%
-  pivot_longer(cols=c(a,c,g,t),names_to = "base",values_to="percent")
-
-ggplot(tb_p,aes(x=position,y=percent,color=cond,linetype=base)) +
-  facet_grid(rows=vars(epitope)) +
-  scale_x_continuous(name="Base",expand=c(0,0),labels=abs) +
-  scale_y_continuous(name="Percent",labels = function(x) paste0(x,"%")) +
-  geom_line() +
-  ggtitle("Per-base sequence content",subtitle="Filtered") +
-  theme(plot.background = element_rect(fill="white",color=NA),
+p_file <- file.path("fastqc_perBaseQScore_filtered.png")
+if(!file.exists(p_file)){
+  tb_p <- fq_hg38$per_base_sequence_quality %>%
+    mutate(name = gsub("_hg38_short$","",name))
+  
+  p <- ggplot(tb_p,aes(x=base,y=mean,color=name)) +
+    scale_x_continuous(name="Base (bp)",expand=c(0,0),labels=abs) + 
+    scale_y_continuous(name="Quality score") +
+    geom_line() +
+    ggtitle("Per-base quality scores",subtitle= "Filtered") +
+    theme(plot.background = element_rect(fill="white",color=NA),
           plot.subtitle = element_text(face="italic"),
           panel.background = element_blank(),
           panel.border = element_rect(fill = NA,color='black'),
@@ -455,22 +471,31 @@ ggplot(tb_p,aes(x=position,y=percent,color=cond,linetype=base)) +
           legend.title = element_blank(),
           axis.ticks.x = element_blank(),
           strip.background = element_blank())
+  ggsave(p_file,p,'png',dpi=300,height=4,width=2 + 3*length(unique(tb_stats$name)))
+}
 ```
 
-### Per-sequence GC content
-```{r perSequenceGCContentFilt,fig.width=8,fig.height=5}
-tb_p  <- fq_hg38$per_sequence_gc_content %>%
-  mutate(name = gsub("_hg38_short$","",name)) %>% 
-  left_join(select(tb_samps,name,cell_line,epitope,rep),by="name") %>%
-  mutate(name = paste(cell_line,rep))
+![](`r p_file`)
 
-ggplot(tb_p,aes(x=gc_content,y=count,color=name,group=name)) +
-  facet_grid(rows=vars(epitope)) +
-  scale_x_continuous(name = "GC content",labels=function(x) paste0(x,"%")) +
-  scale_y_continuous(name = "Reads",labels=prettyNumbers) +
-  geom_line() +
-  ggtitle("Per-sequence GC content",subtitle="Filtered") +
-  theme(plot.background = element_rect(fill="white",color=NA),
+### Per-base sequence content
+```{r perBaseSequenceContentFilt,fig.width=8,fig.height=5}
+p_file <- file.path("fastqc_perBaseSequenceContent_filtered.png")
+if(!file.exists(p_file)){
+  tb_p <- fq_hg38$per_base_sequence_content %>%
+    mutate(name = gsub("_hg38_short$","",name)) %>%
+    as_tibble %>%
+    left_join(select(tb_samps,name,cell_line,epitope,rep),by="name") %>%
+    mutate(cond = paste(cell_line,rep)) %>%
+    rename(position = base) %>%
+    pivot_longer(cols=c(a,c,g,t),names_to = "base",values_to="percent")
+  
+  p <- ggplot(tb_p,aes(x=position,y=percent,color=cond,linetype=base)) +
+    facet_grid(rows=vars(epitope)) +
+    scale_x_continuous(name="Base",expand=c(0,0),labels=abs) +
+    scale_y_continuous(name="Percent",labels = function(x) paste0(x,"%")) +
+    geom_line() +
+    ggtitle("Per-base sequence content",subtitle="Filtered") +
+    theme(plot.background = element_rect(fill="white",color=NA),
             plot.subtitle = element_text(face="italic"),
             panel.background = element_blank(),
             panel.border = element_rect(fill = NA,color='black'),
@@ -479,7 +504,42 @@ ggplot(tb_p,aes(x=gc_content,y=count,color=name,group=name)) +
             legend.title = element_blank(),
             axis.ticks.x = element_blank(),
             strip.background = element_blank())
+  ggsave(p_file,p,'png',dpi=300,height=3,width=8)
+}
 ```
+
+![](`r p_file`)
+
+### Per-sequence GC content
+```{r perSequenceGCContentFilt,fig.width=8,fig.height=5}
+p_file <- file.path("fastqc_perSequenceGC_filtered.png")
+if(!file.exists(p_file)){
+  tb_p  <- fq_hg38$per_sequence_gc_content %>%
+    mutate(name = gsub("_hg38_short$","",name)) %>% 
+    left_join(select(tb_samps,name,cell_line,epitope,rep),by="name") %>%
+    mutate(name = paste(cell_line,rep))
+  
+  p <- ggplot(tb_p,aes(x=gc_content,y=count,color=name,group=name)) +
+    facet_grid(rows=vars(epitope)) +
+    scale_x_continuous(name = "GC content",labels=function(x) paste0(x,"%")) +
+    scale_y_continuous(name = "Reads",labels=prettyNumbers) +
+    geom_line() +
+    ggtitle("Per-sequence GC content",subtitle="Filtered") +
+    theme(plot.background = element_rect(fill="white",color=NA),
+              plot.subtitle = element_text(face="italic"),
+              panel.background = element_blank(),
+              panel.border = element_rect(fill = NA,color='black'),
+              panel.grid.major.x = element_blank(),
+              panel.grid.major.y = element_line(linewidth=0.5,color="gray80"),
+              legend.title = element_blank(),
+              axis.ticks.x = element_blank(),
+              strip.background = element_blank())
+    
+  ggsave(p_file,p,'png',dpi=300,height=3,width=8)
+}
+```
+
+![](`r p_file`)
 
 # Alignment
 
@@ -489,78 +549,84 @@ When calculating scores between samples, the ratio of *Sac3* to *hg38* reads can
 
 For instance, if **SampleA** has a ratio of 0.02 and **SampleB** has a ratio of 0.01, each ratio is divided into 0.01 to give factors of 0.5 (**SampleA**) and 1 (**SampleB**). A peak with 100 reads in **SampleA** and 50 reads in **SampleB** would be multiplied by their respective factors to both be 50.
 ```{r loadSpikes,fig.height=6,fig.width=8}
-type_levs=c(ambiguous="gray",unmapped="pink",sac3="purple",hg38="darkgreen")
-tb_p <- lapply(param_list$tsv_spike,function(fl_nm) {
-  fread(fl_nm,col.names=c("type","reads")) %>%
-    mutate(type = 
-      case_when(grepl("_hg38_",type) ~ "hg38",
-                grepl("_sac3_",type) ~ "sac3",
-                TRUE ~ type),
-           name = gsub("_spike.tsv","",fl_nm))
-  }) %>% do.call(rbind,.) %>%
-  group_by(name) %>%
-  mutate(type = factor(type,levels=names(type_levs))) %>%
-  ungroup
-
-tb_labs <- tb_p %>%
-  mutate(stat = ifelse(type %in% c("hg38","sac3"),"aligned","unaligned")) %>%
-  group_by(name,stat) %>%
-  summarize(total = sum(reads),.groups='drop_last') %>%
-  mutate(frac = total / sum(total)) %>%
-  ungroup %>%
-  filter(stat=='aligned')
-
-p1 <- ggplot(tb_p,aes(x=name,y=reads,fill=type)) +
-  scale_y_continuous(name = "Reads",labels=prettyNumbers,expand=expansion(mult=c(0,0.1))) +
-  scale_fill_manual(values=type_levs) +
-  geom_bar(stat='identity') +
-  geom_text(data=tb_labs,mapping=aes(x=name,y=total,label=paste0("\n",percent(frac,accuracy=1))),
-            color="white",inherit.aes=FALSE) +
-  ggtitle("Read alignment",subtitle="Alignment percentage calculated from hg38 + sac3 reads.") +
-  theme(plot.background = element_rect(fill="white",color=NA),
-        plot.subtitle = element_text(face="italic"),
-        panel.background = element_blank(),
-        panel.border = element_rect(fill=NA,color="black"),
-        panel.grid.major.x = element_blank(),
-        panel.grid.major.y = element_line(linewidth=0.5,color='gray75'),
-        strip.background = element_blank(),
-        axis.text.x = element_text(angle=90,hjust=1,vjust=0.5),
-        axis.title.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        legend.title = element_blank())
-
-tb_p2 <- tb_p %>%
-  filter(type %in% c("sac3","hg38")) %>%
-  group_by(name) %>%
-  mutate(ratio = reads / sum(reads)) %>%
-  filter(type == "sac3")
-p2 <- ggplot(tb_p2,aes(x=name,y=ratio,label=paste0("\n",percent(ratio,accuracy=0.01)))) +
-  scale_y_reverse(name= "Sac3/hg38 Ratio",labels=percent,expand=expansion(mult=c(0.1,0))) +
-  geom_bar(stat='identity',fill='purple',color="black",linewidth=0.25) +
-  geom_text() +
-  theme(plot.background = element_rect(fill="white",color=NA),
-        plot.subtitle = element_text(face="italic"),
-        panel.background = element_blank(),
-        panel.border = element_rect(fill=NA,color="black"),
-        panel.grid.major.x = element_blank(),
-        panel.grid.major.y = element_line(linewidth=0.5,color='gray75'),
-        strip.background = element_blank(),
-        strip.text = element_blank(),
-        axis.text.x = element_blank(),
-        axis.title.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        legend.title = element_blank())
-
-plot_grid(p1,p2,ncol=1,align='v',axis='lr',rel_heights = c(5,3))
+p_file  <- file.path("alignment_read_counts.png")
+if(!file.exists(p_file)){
+  type_levs=c(ambiguous="gray",unmapped="pink",sac3="purple",hg38="darkgreen")
+  tb_p <- lapply(param_list$tsv_spike,function(fl_nm) {
+    fread(fl_nm,col.names=c("type","reads")) %>%
+      mutate(type = 
+        case_when(grepl("_hg38_",type) ~ "hg38",
+                  grepl("_sac3_",type) ~ "sac3",
+                  TRUE ~ type),
+             name = gsub("_spike.tsv","",fl_nm))
+    }) %>% do.call(rbind,.) %>%
+    group_by(name) %>%
+    mutate(type = factor(type,levels=names(type_levs))) %>%
+    ungroup
+  
+  tb_labs <- tb_p %>%
+    mutate(stat = ifelse(type %in% c("hg38","sac3"),"aligned","unaligned")) %>%
+    group_by(name,stat) %>%
+    summarize(total = sum(reads),.groups='drop_last') %>%
+    mutate(frac = total / sum(total)) %>%
+    ungroup %>%
+    filter(stat=='aligned')
+  
+  p1 <- ggplot(tb_p,aes(x=name,y=reads,fill=type)) +
+    scale_y_continuous(name = "Reads",labels=prettyNumbers,expand=expansion(mult=c(0,0.1))) +
+    scale_fill_manual(values=type_levs) +
+    geom_bar(stat='identity') +
+    geom_text(data=tb_labs,mapping=aes(x=name,y=total,label=paste0("\n",percent(frac,accuracy=1))),
+              color="white",inherit.aes=FALSE) +
+    ggtitle("Read alignment",subtitle="Alignment percentage calculated from hg38 + sac3 reads.") +
+    theme(plot.background = element_rect(fill="white",color=NA),
+          plot.subtitle = element_text(face="italic"),
+          panel.background = element_blank(),
+          panel.border = element_rect(fill=NA,color="black"),
+          panel.grid.major.x = element_blank(),
+          panel.grid.major.y = element_line(linewidth=0.5,color='gray75'),
+          strip.background = element_blank(),
+          axis.text.x = element_text(angle=90,hjust=1,vjust=0.5),
+          axis.title.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          legend.title = element_blank())
+  
+  tb_p2 <- tb_p %>%
+    filter(type %in% c("sac3","hg38")) %>%
+    group_by(name) %>%
+    mutate(ratio = reads / sum(reads)) %>%
+    filter(type == "sac3")
+  p2 <- ggplot(tb_p2,aes(x=name,y=ratio,label=paste0("\n",percent(ratio,accuracy=0.01)))) +
+    scale_y_reverse(name= "Sac3/hg38 Ratio",labels=percent,expand=expansion(mult=c(0.1,0))) +
+    geom_bar(stat='identity',fill='purple',color="black",linewidth=0.25) +
+    geom_text() +
+    theme(plot.background = element_rect(fill="white",color=NA),
+          plot.subtitle = element_text(face="italic"),
+          panel.background = element_blank(),
+          panel.border = element_rect(fill=NA,color="black"),
+          panel.grid.major.x = element_blank(),
+          panel.grid.major.y = element_line(linewidth=0.5,color='gray75'),
+          strip.background = element_blank(),
+          strip.text = element_blank(),
+          axis.text.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          legend.title = element_blank())
+  
+  p <- plot_grid(p1,p2,ncol=1,align='v',axis='lr',rel_heights = c(5,3))
+  ggsave(p_file,p,'png',dpi=300,height=8,width=3 + length(unique(tb_p2$name)))
+}
 ```
+
+![](`r p_file`)
 
 # Peak calling {.tabset}
 
 For individual samples, peaks are called using the genome-wide median as a background.
 
-## Enrichment {.tabset}
+## TSS Enrichment {.tabset}
 
-Assuming that measured peaks are real, we expect them to fall on or near promoters (within 10kb of a TSS) or enhancers (within 500kb of a TSS). In the following plots, the distance between each peak and its nearest TSS is calculated and binned. To determine if these values are *significant*, we compare them to a *random distribution of the same peaks*. For every peak, we randomize its location (but not size) within the genome 20 times and measure its distance from a TSS each time. The red segments/curves thus show a normal distribution: i.e., how far do most peaks fall from a TSS if they are distributed randomly. Fold enrichment of measured data is then calculated as the ratio of **real values / randomized values**, and labeled on top of each bar. A value of 2x, for instance, indicates that peaks are *twice as likely to fall in a given bin than expected by chance*, while a value of 1x indicates that we would expect the same result if peaks were random, i.e. not enriched. In most cases, if no bins are substantially greater than 1, we may expect the dataset to be problematic.
+Assuming that measured peaks are real, we likely expect them to fall on or near promoters (within 10kb of a TSS) or enhancers (within 500kb of a TSS). In the following plots, the distance between each peak and its nearest TSS is calculated and binned. To determine if these values are *significant*, we compare them to a *random distribution of the same peaks*. For every peak, we randomize its location (but not size) within the genome 20 times and measure its distance from a TSS each time. The red segments/curves thus show a normal distribution: i.e., how far do most peaks fall from a TSS if they are distributed randomly. Fold enrichment of measured data is then calculated as the ratio of **real values / randomized values**, and labeled on top of each bar. A value of 2x, for instance, indicates that peaks are *twice as likely to fall in a given bin than expected by chance*, while a value of 1x indicates that we would expect the same result if peaks were random, i.e. not enriched. In most cases, if no bins are substantially greater than 1, we may expect the dataset to be problematic.
 ```{r }
 tally_nearest <- function(peaks_in,regions_in,brks,brk_nms){
   distanceToNearest(peaks_in,regions_in) %>%
@@ -596,102 +662,281 @@ bootstrap_enrichment <- function(peaks_in,regions_in,brks_in,brk_nms_in,iters=10
            name = peaks_in$name[1]) %>%
     return()
 }
-plot_peak_enrichment <- function(peak_fls,chrom_gr=gr_chroms,iterations=20){
- brks <- c(-Inf,-1E6,-5E5,-1E5,-5E4,-1E4,1E4,5E4,1E5,5E5,1E6,Inf)
-brk_nms <- c(
-  ">1MB",
-  "1MB-500kb",
-  "500kb-100kb",
-  "100kb-50kb",
-  "50kb-10kb",
-  "TSS +/-10kb",
-  "10kb-50kb",
-  "50kb-100kb",
-  "100kb-500kb",
-  "500kb-1MB",
-  ">1MB") %>%
-  paste0(c(rep(" upstream",5),"",rep(" downstream",5)))
-  
-  tb_enr<- lapply(names(peak_fls),function(nm) {
-      read_peak_file(peak_fls[[nm]]) %>%
-        filter(seqnames %in% seqlevels(chrom_gr)) %>%
-        makeGRangesFromDataFrame %>%
-        reduce %>%
-        bootstrap_enrichment(
-          regions_in = promoters(gr_genes,upstream=1,downstream=0),
-          brks_in = brks,
-          brk_nms_in = brk_nms,
-          genome_in = chrom_gr,
-          iters=iterations) %>%
-        mutate(name = nm)
-    }) %>% do.call(rbind,.)
+plot_peak_enrichment <- function(peak_fls,chrom_gr=gr_chroms,iterations=20,p_file){
+  if(!file.exists(p_file)){
+    t_file <- gsub(".png",".tsv",p_file)
+    brks <- c(-Inf,-1E6,-5E5,-1E5,-5E4,-1E4,1E4,5E4,1E5,5E5,1E6,Inf)
+    brk_nms <- c(
+      ">1MB",
+      "1MB-500kb",
+      "500kb-100kb",
+      "100kb-50kb",
+      "50kb-10kb",
+      "TSS +/-10kb",
+      "10kb-50kb",
+      "50kb-100kb",
+      "100kb-500kb",
+      "500kb-1MB",
+      ">1MB") %>%
+      paste0(c(rep(" upstream",5),"",rep(" downstream",5)))
     
-  ggplot(tb_enr,aes(x=bin,y=count_real,label=paste0(round(ratio_frac,digits=1),"x\n"))) +
-    facet_wrap(.~name,ncol=1,scales="free_y",strip.position = "right") +
-    scale_x_discrete(labels = function(x) gsub(" ","\n",x)) +
-    scale_y_continuous(name="Peaks",expand=expansion(mult=c(0,0.2)),labels=prettyNumbers) +
-    geom_ribbon(mapping=aes(x=bin,ymax=count_rand,ymin=0,group="group"),color="red",fill="black",alpha=0.2) +
-    geom_ribbon(mapping=aes(x=bin,ymax=count_real,ymin=0,group="group"),color="black",fill="black",alpha=0) +
-    geom_bar(stat='identity',color="black") +
-    geom_segment(mapping=aes(x=as.integer(bin)-0.15,xend=as.integer(bin)+0.15,
-                             y=count_rand,yend=count_rand),
-                 color='red') +
-    geom_text(size=2) +
-    ggtitle("Distance to nearest TSS",subtitle=paste("Mean among",iterations,"randomized iterations in red.")) +
-    theme(plot.background = element_rect(fill="white",color=NA),
-          plot.subtitle = element_text(face="italic"),
-          panel.background = element_blank(),
-          panel.border = element_rect(fill=NA,color="black",linewidth=0.5),
-          panel.grid = element_blank(),
-          axis.text.x = element_text(size=4,angle=45,hjust=1,vjust=1),
-          axis.ticks.x = element_blank(),
-          axis.title.x = element_blank(),
-          strip.background = element_blank(),
-          strip.text.y.right = element_text(angle=0,hjust=0,size=6))
+    tb_enr<- lapply(names(peak_fls),function(nm) {
+        read_peak_file(peak_fls[[nm]]) %>%
+          filter(seqnames %in% seqlevels(chrom_gr)) %>%
+          makeGRangesFromDataFrame %>%
+          reduce %>%
+          bootstrap_enrichment(
+            regions_in = promoters(gr_genes,upstream=1,downstream=0),
+            brks_in = brks,
+            brk_nms_in = brk_nms,
+            genome_in = chrom_gr,
+            iters=iterations) %>%
+          mutate(name = nm,
+                 iters = iterations)
+      }) %>% do.call(rbind,.) %T>%
+        fwrite(t_file,sep="\t",row.names=FALSE,col.names=TRUE,quote=FALSE)
+      
+    p <- ggplot(tb_enr,aes(x=bin,y=count_real,label=paste0(round(ratio_frac,digits=1),"x\n"))) +
+      facet_wrap(.~name,ncol=1,scales="free_y",strip.position = "right") +
+      scale_x_discrete(labels = function(x) gsub(" ","\n",x)) +
+      scale_y_continuous(name="Peaks",expand=expansion(mult=c(0,0.2)),labels=prettyNumbers) +
+      geom_ribbon(mapping=aes(x=bin,ymax=count_rand,ymin=0,group="group"),color="red",fill="black",alpha=0.2) +
+      geom_ribbon(mapping=aes(x=bin,ymax=count_real,ymin=0,group="group"),color="black",fill="black",alpha=0) +
+      geom_bar(stat='identity',color="black") +
+      geom_segment(mapping=aes(x=as.integer(bin)-0.15,xend=as.integer(bin)+0.15,
+                               y=count_rand,yend=count_rand),
+                   color='red') +
+      geom_text(size=2) +
+      ggtitle("Distance to nearest TSS",subtitle=paste("Mean among",iterations,"randomized iterations in red.")) +
+      theme(plot.background = element_rect(fill="white",color=NA),
+            plot.subtitle = element_text(face="italic"),
+            panel.background = element_blank(),
+            panel.border = element_rect(fill=NA,color="black",linewidth=0.5),
+            panel.grid = element_blank(),
+            axis.text.x = element_text(size=4,angle=45,hjust=1,vjust=1),
+            axis.ticks.x = element_blank(),
+            axis.title.x = element_blank(),
+            strip.background = element_blank(),
+            strip.text.y.right = element_text(angle=0,hjust=0,size=6))
+    ggsave(p_file,p,"png",dpi=300,height=2 + 2*length(unique(tb_enr$name)),width=6)
+  }
+  return(p_file)
 }
 ```
 
 ### narrowPeaks
 ```{r fig.height=6,fig.width=8}
-c(param_list$npks_pool,param_list$npks_reps) %>%
+p_file <- c(param_list$npks_pool,param_list$npks_reps) %>%
   setNames(gsub("_peaks.narrowPeak","",.)) %>%
-  plot_peak_enrichment
+  plot_peak_enrichment(p_file=file.path("tssDistance_narrowPeaks.png"))
 ```
+
+![](`r p_file`)
 
 ### broadPeaks
 ```{r fig.height=6,fig.width=8}
-c(param_list$bpks_pool,param_list$bpks_reps) %>% 
+p_file <- c(param_list$bpks_pool,param_list$bpks_reps) %>% 
   setNames(gsub("_peaks.broadPeak","",.)) %>%
-  plot_peak_enrichment
+  plot_peak_enrichment(p_file=file.path("tssDistance_broadPeaks.png"))
 ```
+
+![](`r p_file`)
+
+
+## Region Enrichment {.tabset}
+
+```{r }
+fl_feats <- file.path("genome_features.bed")
+if(file.exists(fl_feats)){
+  gr_regs<- fread(fl_feats) %>% 
+    as_tibble %>%
+    mutate(region = factor(region,levels=select(.,region) %>% unlist %>% unique)) %>%
+    makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+}else{
+  tb_feats <- Rsamtools::scanTabix(param_list$gene_gtf) %>%
+    unlist %>%
+    fread(text=.,sep="\t",header=FALSE,
+      col.names = c("seqnames",
+                    "source",
+                    "type",
+                    "start",
+                    "end",
+                    "V6",
+                    "strand",
+                    "V8",
+                    "vals")) %>%
+    as_tibble %>%
+    select(seqnames,start,end,strand,type) %>%
+    filter(type %in% c("exon","gene"))
+  
+  gr_lst <- tb_feats %>%
+    group_split(type) %>%
+    lapply(function(tb) {
+      gr_out <- makeGRangesFromDataFrame(tb,keep.extra.columns=TRUE)
+      seqlevelsStyle(gr_out) <- "UCSC"
+      mcols(gr_out)$type <- tb$type[1]
+      return(gr_out)
+    }) %>%
+    setNames(sapply(.,function(gr) gr$type[1]))
+  gr_lst$promoter <- promoters(gr_lst$gene)
+  
+  gr_lst <- lapply(names(gr_lst), function(nm){
+    gr_out <- gr_lst[[nm]]
+    strand(gr_out) <- "*"
+    gr_out <- reduce(gr_out)
+    mcols(gr_out)$type <- nm
+    return(gr_out)
+  }) %>%
+    setNames(sapply(.,function(gr) gr$type[1]))
+  gr_lst$intron     <- setdiff(gr_lst$gene,gr_lst$exon)
+  gr_lst$intron     <- setdiff(gr_lst$intron,gr_lst$promoter)
+  gr_lst$exon       <- setdiff(gr_lst$exon,gr_lst$promoter)
+  gr_lst$gene       <- NULL
+  gr_lst$intergenic <- setdiff(gr_chroms,c(gr_lst$intron,
+                                         gr_lst$exon,
+                                         gr_lst$promoter))
+  
+  gr_regs <- lapply(names(gr_lst), function(nm){
+    gr_lst[[nm]] %>%
+      as_tibble() %>%
+      select(seqnames,start,end) %>%
+      mutate(region = nm)
+  }) %>% do.call(rbind,.) %>%
+    mutate(region = factor(region,levels=c("promoter","exon","intron","intergenic"))) %>%
+    arrange(region) %T>%
+      fwrite(fl_feats,sep="\t",row.names=FALSE,col.names=TRUE,quote=FALSE)
+  gr_regs <- makeGRangesFromDataFrame(gr_regs,keep.extra.columns = TRUE)
+}
+
+plot_feature_enrichment <- function(peak_fls,gr_regions,p_file){
+  if(!file.exists(p_file)){
+    tb_base <- gr_regions %>%
+      as_tibble %>%
+      group_by(region) %>% 
+      summarize(footprint = sum(width),.groups='drop') %>%
+      mutate(name = "baseline",
+             frac = footprint / sum(footprint)) %>%
+      select(name,region,footprint,frac)
+    
+    tb_enr  <- lapply(names(peak_fls),function(nm) {
+      read_peak_file(peak_fls[[nm]]) %>%
+        as_tibble %>%
+        select(seqnames,start,end) %>%
+        mutate(name = nm) %>%
+        makeGRangesFromDataFrame(keep.extra.columns = TRUE) %>%
+        annotate_gr(gr_regions[gr_regions$region == "promoter"],cols_query = "promoter",as_boolean = TRUE) %>%
+        annotate_gr(gr_regions[gr_regions$region == "exon"],cols_query = "exon",as_boolean = TRUE) %>%
+        annotate_gr(gr_regions[gr_regions$region == "intron"],cols_query = "intron",as_boolean = TRUE) %>%
+        annotate_gr(gr_regions[gr_regions$region == "intergenic"],cols_query = "intergenic",as_boolean = TRUE) %>%
+        as_tibble %>%
+        mutate(region = case_when(promoter ~ "promoter",
+                                  exon ~ "exon",
+                                  intron ~ "intron",
+                                  intergenic ~ "intergenic")) %>%
+        group_by(name,region) %>%
+        summarize(footprint = sum(width),.groups='drop') %>%
+        mutate(frac = footprint / sum(footprint))
+    }) %>% do.call(rbind,.) %>%
+      rbind(tb_base,.) %>%
+      left_join(select(tb_base,region,frac) %>% rename(base_frac=frac), by="region") %>%
+      mutate(ratio = frac / base_frac) %>%
+      group_by(name) %>%
+      arrange(desc(region)) %>%
+      mutate(ypos = cumsum(frac) - frac + (frac/2),
+             label = percent(frac,accuracy=0.1),
+             label = ifelse(name == "baseline",label,paste0(label," (",round(ratio,digits=1),"x)"))) %>%
+      ungroup
+    
+    p <- ggplot(tb_enr,aes(x=name,y=frac,fill=region)) +
+      scale_y_continuous(name = "Footprint fraction",labels=percent) +
+      geom_bar(stat='identity',color='black',linewidth=0.5) +
+      geom_text(mapping=aes(y=ypos,label=label),size=2) +
+      theme(plot.background = element_rect(fill="white",color="black"),
+            panel.background = element_blank(),
+            panel.grid.major.x = element_blank(),
+            panel.grid.major.y = element_line(linewidth=0.5,color='gray80'),
+            axis.title.x = element_blank(),
+            axis.ticks.x = element_blank(),
+            legend.title = element_blank())
+    ggsave(p_file,p,'png',dpi=300,height=4,width=1 + 1.25*length(unique(tb_enr$name)))
+  }
+  return(p_file)
+}
+```
+
+Genome features are divided up such that no region is represented twice. Priority is assigned in the order of **promoter > exon > intron > intergenic**, i.e. a region is only considered "intergenic" if it does not overlap any other feature, and a region that overlaps a promoter is *not* considered an intron/exon *even if it technically overlaps them*.
+```{r }
+p_file <- file.path("featureEnrichment_gwide_map_example.png")
+if(!file.exists(p_file)){
+  gr_wind <- GRanges(seqnames="chr8",IRanges(127740814,128240813))
+  tb_p <- subsetByOverlaps(gr_regs,gr_wind) %>%
+    as_tibble
+  
+  p <- ggplot(tb_p,aes(xmin=start,xmax=end,ymin=0,ymax=1,fill=region)) +
+    facet_wrap(.~region,scales="fixed",strip.position = "right",ncol=1) +
+    scale_x_continuous(name = grange_desc(gr_wind),expand=c(0,0),limits=c(start(gr_wind),end(gr_wind)),labels=prettyBP) +
+    geom_rect(color='black',linewidth=0.25) +
+    theme(plot.background = element_rect(fill="white",color=NA),
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank(),
+          panel.grid.major.x = element_line(linetype='dotted',linewidth=0.5,color='gray80'),
+          strip.background = element_blank(),
+          strip.text.y.right = element_text(angle=0,hjust=0),
+          axis.title.y = element_blank(),
+          axis.ticks.y= element_blank(),
+          axis.text.y = element_blank(),
+          legend.position = 'none')
+  ggsave(p_file,p,"png",dpi=300,height=3,width=8,units='in')
+}
+```
+
+All peaks are overlapped against these regions and the fraction of peaks overlapping each region type is considered "enriched" if it is a larger portion of the genome than expected by chance ("baseline"). In other words, if 10% of peaks fall on promoters, this is a 10-fold enrichment if only 1% of the genome is considered a promoter. In the following plots, the "baseline" bars on the left represent the genome-wide footprint of each feature set, and each pool/sample's peak set is labeled with the genome-wide fraction as well as its fold enrichment vs. the genome-wide mean.
+
+### narrowPeaks
+```{r enrichmentNarrowPeaks}
+p_file <- c(param_list$npks_pool,param_list$npks_reps) %>%
+  setNames(gsub("_peaks.narrowPeak","",.)) %>%
+  plot_feature_enrichment(gr_regions = gr_regs,p_file = "featureEnrichment_narrowPeaks.png")
+```
+
+![](`r p_file`)
+
+### broadPeaks
+```{r enrichmentbroadPeaks}
+p_file <- c(param_list$bpks_pool,param_list$bpks_reps) %>%
+  setNames(gsub("_peaks.broadPeak","",.)) %>%
+  plot_feature_enrichment(gr_regions = gr_regs,p_file = "featureEnrichment_broadPeaks.png")
+```
+
+![](`r p_file`)
 
 ## FRiP
 ```{r indPeakcalling,height=4,width=6}
-tb_p <- lapply(param_list$tsvs_frip,function(fl_nm) {
-  fread(fl_nm) %>%
-    as_tibble %>%
-    mutate(name = gsub("_narrowPeaks_FRiP.txt","",fl_nm))
-}) %>% do.call(rbind,.)
-
-tb_lab <- tibble(x=0.5,y=0.3,label="Ideal FRiP\n(Cut&Run)",cell_line=tb_p$cell_line[1])
-
-ggplot(tb_p,aes(x=name,y=frip)) +
-  scale_y_continuous(name="FRiP",labels=percent,limits=c(0,1),expand=c(0,0)) +
-  geom_bar(stat='identity',color='black',linewidth=0.25) +
-  geom_hline(yintercept = 0.3,color='red',linetype='dashed') +
-  geom_text(data=tb_lab,mapping=aes(x=x,y=y,label=label),
-            color="red",hjust=0,
-            inherit.aes=FALSE) +
-  ggtitle("Fraction of Reads in Peaks") +
-  theme(plot.background = element_blank(),
-        panel.background = element_blank(),
-        panel.border = element_rect(fill=NA,color="black",linewidth = 0.5),
-        panel.grid.major.x = element_blank(),
-        panel.grid.major.y = element_line(linewidth=0.5,color='gray85'),
-        strip.background = element_blank(),
-        axis.text.x = element_text(angle=45,hjust=1,vjust=1),
-        axis.title.x = element_blank())
+p_file <- file.path("frip_narrowPeaks.png")
+if(!file.exists(p_file)){
+  tb_p <- lapply(param_list$tsvs_frip,function(fl_nm) {
+    fread(fl_nm) %>%
+      as_tibble %>%
+      mutate(name = gsub("_narrowPeaks_FRiP.txt","",fl_nm))
+  }) %>% do.call(rbind,.)
+  
+  p <- ggplot(tb_p,aes(x=name,y=frip)) +
+    scale_y_continuous(name="FRiP",labels=percent,limits=c(0,1),expand=c(0,0)) +
+    geom_bar(stat='identity',color='black',linewidth=0.25) +
+    ggtitle("Fraction of Reads in Peaks") +
+    theme(plot.background = element_rect(fill='white',color=NA),
+          panel.background = element_blank(),
+          panel.border = element_rect(fill=NA,color="black",linewidth = 0.5),
+          panel.grid.major.x = element_blank(),
+          panel.grid.major.y = element_line(linewidth=0.5,color='gray85'),
+          strip.background = element_blank(),
+          axis.text.x = element_text(angle=45,hjust=1,vjust=1),
+          axis.title.x = element_blank())
+  ggsave(p_file,p,"png",dpi=300,height=4,width=2 + length(unique(tb_p$name)))
+}
 ```
+
+![](`r p_file`)
 
 ## Peak stats {.tabset}
 ```{r peakFunction}
@@ -746,19 +991,29 @@ peak_plot <- function(peak_file_list,p_title="NarrowPeaks",file_suffix="_peaks.n
 
 ### Replicates
 ```{r peakDetailsRepsFig.height=8,fig.width=6}
-p_nar <- peak_plot(param_list$npks_reps,"NarrowPeaks","_peaks.narrowPeak")
-p_brd <- peak_plot(param_list$bpks_reps,"BroadPeaks","_peaks.broadPeak",theme_addendum = theme(axis.title.y = element_blank()))
-
-cowplot::plot_grid(p_nar,p_brd,nrow=1,align='v',axis='tb')
+p_file <- file.path("peak_summaryStats_replicates.png")
+if(!file.exists(p_file)){
+  p_nar <- peak_plot(param_list$npks_reps,"NarrowPeaks","_peaks.narrowPeak")
+  p_brd <- peak_plot(param_list$bpks_reps,"BroadPeaks","_peaks.broadPeak",theme_addendum = theme(axis.title.y = element_blank()))
+  
+  p <- cowplot::plot_grid(p_nar,p_brd,nrow=1,align='h',axis='tb')
+  ggsave(p_file,p,'png',dpi=300,height=8,width=3 + 2*length(param_list$npks_reps))
+}
 ```
 
 ### Pooled
 ```{r peakDetailsPooledFig.height=8,fig.width=6}
-p_nar <- peak_plot(param_list$npks_pool,"NarrowPeaks","_peaks.narrowPeak")
-p_brd <- peak_plot(param_list$bpks_pool,"BroadPeaks","_peaks.broadPeak",theme_addendum = theme(axis.title.y = element_blank()))
-
-cowplot::plot_grid(p_nar,p_brd,nrow=1,align='v',axis='tb')
+p_file <- file.path("peak_summaryStats_pooled.png")
+if(!file.exists(p_file)){
+  p_nar <- peak_plot(param_list$npks_pool,"NarrowPeaks","_peaks.narrowPeak")
+  p_brd <- peak_plot(param_list$bpks_pool,"BroadPeaks","_peaks.broadPeak",theme_addendum = theme(axis.title.y = element_blank()))
+  
+  p <- cowplot::plot_grid(p_nar,p_brd,nrow=1,align='h',axis='tb')
+  ggsave(p_file,p,'png',dpi=300,height=8,width=5)
+}
 ```
+
+![](`r p_file`)
 
 # Regional plots {.tabset}
 ```{r regionPlotFunctions}
@@ -777,65 +1032,72 @@ read_peaks <- function(peak_file_list){
       as_tibble
     }) %>% do.call(rbind,.)
 }
-plot_region <- function(gr_window,bdg_tbl = tb_bdgs,gr_peaks_in = gr_pks){
-  x_rng   <- c(start(gr_window),end(gr_window))
-  tb_sig  <- bdg_tbl %>%
-    vectify(bdg,name) %>%
-    scan_bdg(gr_regions = gr_window) %>%
-    left_join(select(bdg_tbl,-bdg),by="name") %>%
-    group_by(name) %>%
-    mutate(x = case_when(start == min(start) ~ start,
-                         end == max(end) ~ end,
-                         TRUE ~ (start + end) / 2),
-           score = ifelse(type == "ctrl",-score,score))
-  
-  tb_scales <- tb_sig %>%
-    group_by(samp) %>%
-    summarize(ymin=0,ymax=1.3*max(score),.groups='drop')
-  
-  tb_pks <- subset_and_trim_gr(gr_peaks_in,gr_window) %>% 
-    as_tibble %>%
-    rename(samp = name) %>%
-    left_join(tb_scales,by="samp") %>%
-    mutate(y_shift = 0.05 * (ymax - ymin),
-           y1=case_when(peaks == "broadPeaks" ~ ymax,
-                        peaks == "narrowPeaks" ~ ymax - y_shift,
-                        TRUE ~ ymax - 3*y_shift),
-           y2=y1 - y_shift)
-  tb_s  <- filter(tb_pks,peaks=="summits")
-  tb_p  <- filter(tb_pks,peaks!="summits")
-  
-  geom_pks <- NULL
-  geom_sums <- NULL
-  if(nrow(tb_s) > 0){
-    geom_sums <- geom_point(data=tb_s,mapping=aes(x=(start+end)/2,y=y1),color="black",pch=8,inherit.aes=FALSE)
+plot_region <- function(gr_window,bdg_tbl = tb_bdgs,gr_peaks_in = gr_pks,out_name){
+  if(missing(out_name)){
+    out_name <- as.character(gr_window) %>% gsub("[:-]","_",.) %>% paste0("pileup_",.,".png")
   }
-  if(nrow(tb_p) > 0){
-    geom_pks<- geom_rect(data=tb_p,mapping=aes(xmin=start,xmax=end,ymin=y2,ymax=y1,fill=peaks),color='black',alpha=1,linewidth=0.1,inherit.aes=FALSE)
+  if(!file.exists(out_name)){
+    x_rng   <- c(start(gr_window),end(gr_window))
+    tb_sig  <- bdg_tbl %>%
+      vectify(bdg,name) %>%
+      scan_bdg(gr_regions = gr_window) %>%
+      left_join(select(bdg_tbl,-bdg),by="name") %>%
+      group_by(name) %>%
+      mutate(x = case_when(start == min(start) ~ start,
+                           end == max(end) ~ end,
+                           TRUE ~ (start + end) / 2),
+             score = ifelse(type == "ctrl",-score,score))
+    
+    tb_scales <- tb_sig %>%
+      group_by(samp) %>%
+      summarize(ymin=0,ymax=1.3*max(score),.groups='drop')
+    
+    tb_pks <- subset_and_trim_gr(gr_peaks_in,gr_window) %>% 
+      as_tibble %>%
+      rename(samp = name) %>%
+      left_join(tb_scales,by="samp") %>%
+      mutate(y_shift = 0.05 * (ymax - ymin),
+             y1=case_when(peaks == "broadPeaks" ~ ymax,
+                          peaks == "narrowPeaks" ~ ymax - y_shift,
+                          TRUE ~ ymax - 3*y_shift),
+             y2=y1 - y_shift)
+    tb_s  <- filter(tb_pks,peaks=="summits")
+    tb_p  <- filter(tb_pks,peaks!="summits")
+    
+    geom_pks <- NULL
+    geom_sums <- NULL
+    if(nrow(tb_s) > 0){
+      geom_sums <- geom_point(data=tb_s,mapping=aes(x=(start+end)/2,y=y1),color="black",pch=8,inherit.aes=FALSE)
+    }
+    if(nrow(tb_p) > 0){
+      geom_pks<- geom_rect(data=tb_p,mapping=aes(xmin=start,xmax=end,ymin=y2,ymax=y1,fill=peaks),color='black',alpha=1,linewidth=0.1,inherit.aes=FALSE)
+    }
+    p_sig <- ggplot(tb_sig,aes(x=x,ymin=0,ymax=score,alpha=type)) +
+      facet_wrap(.~samp,scales="free_y",strip.position = "right",ncol=1) +
+      scale_x_continuous(name= grange_desc(gr_window),expand=c(0,0),limits=x_rng,labels=prettyBP) +
+      scale_y_continuous(name= "Pileup",labels=function(x) ifelse(x>0,prettyNumbers(x),""),n.breaks = 3) +
+      scale_alpha_manual(values=c(treat=1,ctrl=0.3)) +
+      geom_ribbon(fill="gray25",color='black') +
+      geom_pks +
+      geom_sums +
+      new_scale_fill() +
+      geom_rect(data=tb_scales,mapping=aes(ymax=ymax),xmin=-Inf,xmax=Inf,ymin=0,fill=NA,color=NA,inherit.aes=FALSE) +
+      theme(plot.background = element_rect(fill="white",color=NA),
+            panel.background = element_blank(),
+            panel.border = element_rect(fill=NA,color="black"),
+            panel.grid = element_blank(),
+            panel.spacing.y = unit(0,"lines"),
+            strip.text.y.right = element_text(angle=0),
+            strip.background = element_blank(),
+            legend.title = element_blank()) %>% suppressWarnings()
+    p_gns <- plot_genes(genomic_region = gr_window,gr_genes = gr_gns) +
+      theme(legend.position = 'none',
+            panel.grid = element_blank())
+    
+    p <- cowplot::plot_grid(p_gns,p_sig,ncol=1,align="v",axis='lr',rel_heights=c(1,5))
+    ggsave(out_name,p,"png",dpi=300,height=4 + 1.5*length(unique(tb_bdgs$samp)),width = 10)
   }
-  p_sig <- ggplot(tb_sig,aes(x=x,ymin=0,ymax=score,alpha=type)) +
-    facet_wrap(.~samp,scales="free_y",strip.position = "right",ncol=1) +
-    scale_x_continuous(name= grange_desc(gr_window),expand=c(0,0),limits=x_rng,labels=prettyBP) +
-    scale_y_continuous(name= "Pileup",labels=function(x) ifelse(x>0,prettyNumbers(x),""),n.breaks = 3) +
-    scale_alpha_manual(values=c(treat=1,ctrl=0.3)) +
-    geom_ribbon(fill="gray25",color='black') +
-    geom_pks +
-    geom_sums +
-    new_scale_fill() +
-    geom_rect(data=tb_scales,mapping=aes(ymax=ymax),xmin=-Inf,xmax=Inf,ymin=0,fill=NA,color=NA,inherit.aes=FALSE) +
-    theme(plot.background = element_rect(fill="white",color=NA),
-          panel.background = element_blank(),
-          panel.border = element_rect(fill=NA,color="black"),
-          panel.grid = element_blank(),
-          panel.spacing.y = unit(0,"lines"),
-          strip.text.y.right = element_text(angle=0),
-          strip.background = element_blank(),
-          legend.title = element_blank()) %>% suppressWarnings()
-  p_gns <- plot_genes(genomic_region = gr_window,gr_genes = gr_gns) +
-    theme(legend.position = 'none',
-          panel.grid = element_blank())
-  
-  cowplot::plot_grid(p_gns,p_sig,ncol=1,align="v",axis='lr',rel_heights=c(1,5))
+  return(out_name)
 }
 ```
 ```{r }
@@ -877,8 +1139,11 @@ gr_npks   <- read_peaks(param_list$npks_pool) %>% makeGRangesFromDataFrame(keep.
 pk_samples<- min(c(length(gr_npks),5))
 
 gr_wins <- gr_npks[order(gr_npks$nlog10q,decreasing = TRUE)][1:pk_samples] %>% resize(width=width(.) * 10,fix='center')
-
+```
+```{r results='asis'}
 for(i in 1:pk_samples){
-  plot(plot_region(gr_window = gr_wins[i]))
+  p_file  <- plot_region(gr_window = gr_wins[i])
+  cat("\n\n## Region ",i,"\n\n")
+  cat("![](",p_file,")")
 }
 ```
