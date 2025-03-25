@@ -161,9 +161,9 @@ data
 │   │   ├── peaks
 │   │   │   └── cuts
 │   │   ├── qc
+│   │   │   └── H358_MYC_WT_run1_report.html
 │   │   ├── H358_MYC_WT_spike.tsv
-│   │   ├── H358_MYC_WT_run1_file_summary.tsv
-│   │   └── H358_MYC_WT_run1_report.html
+│   │   └── H358_MYC_WT_run1_file_summary.tsv
 └── replicates
     ├── H358_MYC_WT_1
     │   ├── align
