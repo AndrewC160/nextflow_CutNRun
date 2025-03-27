@@ -127,7 +127,7 @@ Each replicate should have a unique combination of project/cell_line/epitope/rep
 
 ### Rank Ordering of Super-Enhancers (ROSE)
 
-By default, pooled narrowPeak data along with control/background BAM files are subjected to an abbreviated implementation of the [Rank Ordering of Super-enhancers]() protocol to detect super-enhancers among peaks. These results are stored in the pooled sample `ROSE` directory, including a summary HTML, a TSV file of annotated super-enhancers, and an RDS file that contains a `SummarizedExperiment` object that contains raw/normalized scores (available via `assay(se,"counts")` and `assay(se,"norm")`, respectively), library information (`colData(se)`), and region annotations (`rowData(se)`) including super-enhancer status, nearest genes, peaks encompassed, etc.
+By default, pooled narrowPeak data along with control/background BAM files are subjected to an abbreviated, custom implementation of the [Rank Ordering of Super-enhancers](https://github.com/stjude/ROSE) protocol to detect super-enhancers among peaks. These results are stored in the pooled sample `ROSE` directory, including a summary HTML, a TSV file of annotated super-enhancers, and an RDS file that contains a `SummarizedExperiment` object that contains raw/normalized scores (available via `assay(se,"counts")` and `assay(se,"norm")`, respectively), library information (`colData(se)`), and region annotations (`rowData(se)`) including super-enhancer status, nearest genes, peaks encompassed, etc.
 
 ### MEME Suite (Optional)
 
