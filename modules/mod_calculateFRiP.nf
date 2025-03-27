@@ -17,7 +17,7 @@ process calculateFRiP {
   echo -e "total\tin_peaks\tfrip" > ${outp_txt}
   
   #Count reads.
-  reads_total=\$(samtools view -c ${bam_file})
+  reads_total=\$(samtools view --require-flags 3 -c ${bam_file})
   
   #Count reads in peaks.
   reads_peaks=\$(bedtools intersect -a <(cut -f1,2,3 ${bed_file}) -b ${bam_file} -c | awk '{i+=\$4}END{print i}')

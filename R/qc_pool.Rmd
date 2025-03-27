@@ -628,7 +628,7 @@ For individual samples, peaks are called using the genome-wide median as a backg
 
 Assuming that measured peaks are real, we likely expect them to fall on or near promoters (within 10kb of a TSS) or enhancers (within 500kb of a TSS). In the following plots, the distance between each peak and its nearest TSS is calculated and binned. To determine if these values are *significant*, we compare them to a *random distribution of the same peaks*. For every peak, we randomize its location (but not size) within the genome 20 times and measure its distance from a TSS each time. The red segments/curves thus show a normal distribution: i.e., how far do most peaks fall from a TSS if they are distributed randomly. Fold enrichment of measured data is then calculated as the ratio of **real values / randomized values**, and labeled on top of each bar. A value of 2x, for instance, indicates that peaks are *twice as likely to fall in a given bin than expected by chance*, while a value of 1x indicates that we would expect the same result if peaks were random, i.e. not enriched. In most cases, if no bins are substantially greater than 1, we may expect the dataset to be problematic.
 ```{r }
-tally_nearest <- function(peaks_in,regions_in,brks,brk_nms){
+tally_nearest       <- function(peaks_in,regions_in,brks,brk_nms){
   distanceToNearest(peaks_in,regions_in) %>%
     as_tibble %>%
     left_join(
@@ -649,7 +649,7 @@ tally_nearest <- function(peaks_in,regions_in,brks,brk_nms){
     mutate(frac = count/sum(count)) %>%
     return()
 }
-bootstrap_enrichment <- function(peaks_in,regions_in,brks_in,brk_nms_in,iters=10,genome_in=gr_chroms){
+bootstrap_enrichment<- function(peaks_in,regions_in,brks_in,brk_nms_in,iters=10,genome_in=gr_chroms){
   gr_rand <- randomize_grange(peaks_in,max_sample = Inf,sample_num = iters,genome_in = genome_in)
   
   rbind(
@@ -662,7 +662,7 @@ bootstrap_enrichment <- function(peaks_in,regions_in,brks_in,brk_nms_in,iters=10
            name = peaks_in$name[1]) %>%
     return()
 }
-plot_peak_enrichment <- function(peak_fls,chrom_gr=gr_chroms,iterations=20,p_file){
+plot_peak_enrichment<- function(peak_fls,chrom_gr=gr_chroms,iterations=20,p_file){
   if(!file.exists(p_file)){
     t_file <- gsub(".png",".tsv",p_file)
     brks <- c(-Inf,-1E6,-5E5,-1E5,-5E4,-1E4,1E4,5E4,1E5,5E5,1E6,Inf)
@@ -810,6 +810,7 @@ if(file.exists(fl_feats)){
 
 plot_feature_enrichment <- function(peak_fls,gr_regions,p_file){
   if(!file.exists(p_file)){
+    t_file  <- gsub(".png",".tsv",p_file)
     tb_base <- gr_regions %>%
       as_tibble %>%
       group_by(region) %>% 
@@ -845,7 +846,8 @@ plot_feature_enrichment <- function(peak_fls,gr_regions,p_file){
       mutate(ypos = cumsum(frac) - frac + (frac/2),
              label = percent(frac,accuracy=0.1),
              label = ifelse(name == "baseline",label,paste0(label," (",round(ratio,digits=1),"x)"))) %>%
-      ungroup
+      ungroup %T>%
+        fwrite(t_file,sep="\t",row.names=FALSE,col.names=TRUE,quote=FALSE)
     
     p <- ggplot(tb_enr,aes(x=name,y=frac,fill=region)) +
       scale_y_continuous(name = "Footprint fraction",labels=percent) +
@@ -855,6 +857,7 @@ plot_feature_enrichment <- function(peak_fls,gr_regions,p_file){
             panel.background = element_blank(),
             panel.grid.major.x = element_blank(),
             panel.grid.major.y = element_line(linewidth=0.5,color='gray80'),
+            axis.text.x = element_text(angle=45,hjust=1,vjust=1),
             axis.title.x = element_blank(),
             axis.ticks.x = element_blank(),
             legend.title = element_blank())
@@ -890,6 +893,8 @@ if(!file.exists(p_file)){
 }
 ```
 
+![](`r p_file`)
+
 All peaks are overlapped against these regions and the fraction of peaks overlapping each region type is considered "enriched" if it is a larger portion of the genome than expected by chance ("baseline"). In other words, if 10% of peaks fall on promoters, this is a 10-fold enrichment if only 1% of the genome is considered a promoter. In the following plots, the "baseline" bars on the left represent the genome-wide footprint of each feature set, and each pool/sample's peak set is labeled with the genome-wide fraction as well as its fold enrichment vs. the genome-wide mean.
 
 ### narrowPeaks
@@ -911,7 +916,7 @@ p_file <- c(param_list$bpks_pool,param_list$bpks_reps) %>%
 ![](`r p_file`)
 
 ## FRiP
-```{r indPeakcalling,height=4,width=6}
+```{r plotFrip,height=4,width=6}
 p_file <- file.path("frip_narrowPeaks.png")
 if(!file.exists(p_file)){
   tb_p <- lapply(param_list$tsvs_frip,function(fl_nm) {
