@@ -1,0 +1,425 @@
+---
+title: "Rank Ordering of Super-Enhancers implementation"
+author: "Andrew Clugston"
+date: "2025-03-26"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: spacelab
+    code_folding: hide
+params:
+  pool_name: "OS742_K27Ac_KO_1_Project_ACEH_EH005"
+  bams_test: "OS742_K27Ac_KO_1_hg38.bam OS742_K27Ac_KO_2_hg38.bam"
+  bams_ctrl: "OS742_IgG_KO_1_hg38.bam"
+  peak_file: "OS742_K27Ac_KO_peaks.narrowPeak"
+  gene_gtf: "/N/p/asclab/ASC-cutNrun/25MAR26-ROSE_inhouse/Homo_sapiens.GRCh38.104.chr.tabix.gtf.gz"
+  bdg_treat: "OS742_K27Ac_KO_treat_pileup.bdg.gz"
+  bdg_ctrl: "OS742_K27Ac_KO_control_lambda.bdg.gz"
+  R_dir: "/N/p/asclab/ASC-cutNrun/nextflow/nextflow_CutNRun/R/R_functions/"
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(data.table)
+library(magrittr)
+library(Rsamtools)
+library(ggplot2)
+library(ggrepel)
+library(reactable)
+library(GenomicRanges)
+library(GenomicAlignments)
+library(scales)
+library(cowplot)
+
+###
+##
+#
+#knitr::opts_knit$set(root.dir = "/N/p/asclab/ASC-cutNrun/25MAR26-ROSE_inhouse")
+#
+##
+###
+
+param_list <- lapply(params,function(x) str_split(x,pattern=" ")[[1]])
+
+# Source R functions.
+sapply(Sys.glob(file.path(param_list$R_dir,"*.R")),source) %>% invisible()
+
+gr_gns <- gtf_to_genes(gtf_file = params$gene_gtf,cache_file = "genes.tsv")
+
+knitr::opts_chunk$set(echo = TRUE)
+tss_distance    <- 10000
+stitch_distance <- 12500
+tsv_output      <- paste0(param_list$pool_name,"_ROSEoutput.tsv")
+```
+
+This script serves as a simplified in-house implementation of the [Rank Ordering of Super-Enhancers](https://github.com/stjude/ROSE) protocol. While there are steps that are skipped, this markdown does the following using **A) Treatment BAM files**, **B) IgG (control) BAM files**, **C) a narrowPeaks file**, **D) a GTF file of gene annotations**:
+
+1. Eliminate from contention any `narrowPeak` that falls within **`r prettyBP(tss_distance)`** of a transcription start site or on a sex chromosome.
+
+2. Stitch together any `narrowPeaks` that fall within **`r prettyBP(stitch_distance)`** into one "region."
+
+3. Count treatment and control reads that fall within each region.
+
+4. Normalize treatment/control scores by library size (based on BAM file reads).
+
+5. Calculate the **library-normalized treatment** and **control** scores for each region. In cases with multiple replicates, use the **mean**.
+
+6. Subtract **control** scores for each region from **treatment** to get the IgG-normalized signal scores.
+
+7. Calculate the "signal area" of each region as **score x width** (in `kb`).
+
+8. Rank all regions by signal area.
+
+9. Calculate the *slope* of signal area curve: $\frac{max - min}{n}$
+    
+    Where *min* and *max* represent the min/max area scores, respectively, and *n* is the number of stitched regions (distinct from the number of *peaks*).
+
+10. Determine at which rank the *slope of the curve is closest to the slope of the data overall*, i.e. the *inflection point of the curve.* This is the **cutoff rank**, and the area of the region at this rank is the **cutoff score**.
+
+11. Any region with a greater area score than the **cutoff score** is considered a super-enhancer.
+
+A TSV file with super-enhancer annotations will be produced in this report's output directory:
+
+``r tsv_output``
+
+An RDS file containing a `SummarizedExperiment` is also saved (``r gsub(".tsv",".rds",tsv_output)``). This object contains raw/normalized scores (available via `assay(se,"counts")` and `assay(se,"norm")`, respectively), library information (`colData(se)`), and region annotations (`rowData(se)`) including super-enhancer status, nearest genes, peaks encompassed, etc.
+    
+```{r functions}
+pts_below_line<- function(vect,m,x){
+  vect  <- sort(vect)
+  y_pt  <- vect[x]
+  b     <- y_pt - (m * x)
+  x_pts <- seq_along(vect)
+  return(sum(vect <= (x_pts * m + b)))
+}
+calc_cutoff   <- function(vec_in){
+  slp       <- (max(vec_in) - min(vec_in))/length(vec_in)
+  cross_pt  <- floor(optimize(pts_below_line,lower=1,upper=length(vec_in),vect=vec_in,m=slp)$minimum)
+  return(vec_in[length(vec_in)-cross_pt])
+}
+rose_program  <- function(bams_trt,bams_igg,peak_file,gns_gtf,stitch_dist = stitch_distance,tss_dist=tss_distance,out_tsv){
+  out_rds   <- gsub(".tsv",".rds",out_tsv)
+  if(file.exists(out_tsv) & file.exists(out_rds)){
+    message("Loading existing ROSE data...")
+    tb_ses  <- fread(out_tsv,sep="\t",header=TRUE,quote=FALSE)
+    se      <- readRDS(out_rds)
+  }else{
+    message("Running ROSE protocol...")
+    
+    # Load BAM files and calculate library sizes.
+    bam_trt   <- BamFileList(bams_trt)
+    bam_igg   <- BamFileList(bams_igg)
+    b_counts  <- countBam(c(bam_trt,bam_igg)) %>%
+      select(file,records) %>%
+      rownames_to_column("bam_file")
+    
+    # Load TSS sites.
+    gr_gns <- gtf_to_genes(gns_gtf)
+    gr_tss <- promoters(gr_gns,upstream=tss_dist,downstream=tss_dist)
+    
+    # Load peak locations.
+    gr_pks <- read_peak_file(peak_file) %>%
+      filter(!seqnames %in% c("chrM","chrY","chrX")) %>%
+      makeGRangesFromDataFrame %>%
+      reduce %>%
+      subsetByOverlaps(gr_tss,invert=TRUE)
+    mcols(gr_pks)$peak  <- c(1:length(gr_pks))
+    
+    # Generate stitched regions.
+    #  1. Resize all peaks to add stitch_dist to start and end coords
+    #  2. Reduce expanded peaks to flat regions
+    #  3. Identify original peaks that overlap each flattened region.
+    #  4. For a given region, specify start/end locations as the min/max start/end locations for all 
+    #     overlapping peaks.
+    #  5. Annotate each region with the numbers of peaks and the range of peak indices it comprises.
+    gr_stitched <- gr_pks %>%
+      resize(width = width(.)+2*stitch_dist,fix="center") %>%
+      reduce
+    
+    gr_regs <- findOverlaps(gr_stitched,gr_pks) %>%
+      as_tibble %>%
+      dplyr::rename(peak=subjectHits) %>%
+      left_join(as_tibble(gr_pks),by="peak") %>%
+      group_by(seqnames,queryHits) %>%
+      summarize(start = min(start),
+                end=max(end),
+                peak_count = n(),
+                peak_min = min(peak),
+                peak_max = max(peak),
+                .groups='drop') %>%
+      rowwise %>%
+      mutate(peaks = ifelse(peak_min == peak_max,as.character(peak_min),paste0(peak_min,"-",peak_max))) %>%
+      ungroup %>%
+      mutate(region = paste0("region_",row_number())) %>%
+      select(-peak_min,-peak_max) %>%
+      makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+    
+    # Count overlapping reads within each region (treatment and control).
+    #  Incorporate into SummarizedExperiment object with a "count" assay.
+    se <- summarizeOverlaps(features = gr_regs,reads = c(bam_trt,bam_igg))
+    
+    # rowData: region stats.
+    rowData(se) <- gr_regs %>%
+      as_tibble %>%
+      select(-strand) %>%
+      DataFrame 
+  
+    # colData: Library details.
+    tb <- DataFrame(bam_file = names(c(bam_trt,bam_igg)),
+                    set = c(rep("test",length(bam_trt)),
+                            rep("ctrl",length(bam_igg))),
+                    lib_size = b_counts$records)
+    
+    #  Weight: minimum library size/each library size.
+    #   Smallest library gets weight of 1, a library 
+    #   twice as large gets a weight of 0.5, etc.
+    tb$weight     <- min(tb$lib_size)/tb$lib_size
+    rownames(tb)  <- colnames(se)
+    colData(se)   <- tb
+    
+    # Normalized matrix is made by multiplying each column by its respective weight.
+    assay(se,"norm")  <- assay(se) * colData(se)$weight
+    
+    # For each region, take the mean library-normalized score among treatment and
+    #  control samples, then subtract the control sample from the treatment. This
+    #  is the background-subtracted score. Negative values are zapped to zero.
+    # Area is calculated as score * width (in kb).
+    tb_p <- assay(se,"norm") %>%
+      as_tibble %>%
+      cbind(as_tibble(rowData(se)) %>% select(seqnames,start,end,width,peak_count,region),.) %>%
+      pivot_longer(cols = -c(seqnames,start,end,width,peak_count,region),
+                   names_to='bam_file',
+                   values_to = "counts") %>%
+      left_join(as_tibble(colData(se)),by="bam_file") %>%
+      mutate(score = counts * weight) %>%
+      group_by(seqnames,start,end,width,peak_count,region,set) %>%
+      summarize(score = mean(score),.groups='drop') %>%
+      pivot_wider(id_cols=c(seqnames,start,end,width,peak_count,region),
+                  names_from=set,values_from=score) %>%
+      mutate(score = test - ctrl,
+             score = ifelse(score < 0,0,score),
+             area = score * (width/1E3)) %>%
+      select(-test,-ctrl) %>%
+      arrange(desc(area)) %>%
+      mutate(rank = row_number())
+    
+    # Calculate an area cutoff above which a region is called a "Super-enhancer."
+    # 1. Calculate the slope of all region areas (sorted by rank).
+    # 2. Identify the point (rank) at which the slope of the curve is closest to
+    #    the slope of the dataset.
+    # 3. Determine the area (y-value) of that ranked sample.
+    # 4. All regions with areas greater than or equal to the cutoff area are SEs.
+    cutoff_value <- calc_cutoff(tb_p$area)
+    tb_p    <- mutate(tb_p,se=area > cutoff_value)
+    
+    # Assign nearest protein_coding / lncRNA genes to all peaks.
+    gr_ses  <- makeGRangesFromDataFrame(tb_p,keep.extra.columns = TRUE)
+    gn_set  <- gr_gns[gr_gns$gene_biotype %in% c("protein_coding","lncRNA")]
+    nrst    <- nearest(gr_ses,gn_set)
+    gr_ses$nearest_gene <- mcols(gn_set)$gene_name[nrst]
+    gr_ses$nearest_dist <- distance(gr_ses,gn_set[nrst])
+    
+    # Save a TSV file of super-enhancer regions.
+    tb_ses <- gr_ses %>%
+      as_tibble %>%
+      select(-strand) %T>%
+        fwrite(out_tsv,sep="\t",row.names=FALSE,col.names=TRUE,quote=FALSE)
+    
+    # Update SummarizedExperiment rowData include SE annotations, and add the
+    # calculated area cutoff to its metadata.
+    rowData(se) <- inner_join(by="region",
+      as_tibble(rowData(se)),
+      select(tb_ses,region,rank,se,nearest_gene,nearest_dist,area,score) ) %>%
+      DataFrame
+    metadata(se) <- list(area_cutoff = cutoff_value)
+    
+    # Save a copy of the SummarizedExperiment object as an RDS file.
+    saveRDS(se,out_rds)
+  }
+  return(list(peaks=tb_ses,se=se))
+}
+plot_region   <- function(gr_window,bdg_treat = param_list$bdg_treat,bdg_ctrl=param_list$bdg_ctrl,fl_peaks=param_list$peak_file,gr_ses,out_file){
+  if(missing(out_file)){
+    out_file <- as.character(gr_window) %>% gsub("[:-]","_",.) %>% paste0("pileup_",.,".png")
+  }
+  if(!file.exists(out_file)){
+    x_rng   <- c(start(gr_window),end(gr_window))
+    
+    bdg_tb  <- tibble(bdg=c(bdg_treat,bdg_ctrl),
+                      type=c(rep("treat",length(bdg_treat)),
+                             rep("ctrl",length(bdg_ctrl)))) %>%
+      mutate(name = gsub(".bdg.gz","",bdg) %>%
+               gsub("_treat","",.) %>%
+               gsub("_lambda","",.))
+    tb_sig  <- vectify(bdg_tb,bdg,name) %>%
+      scan_bdg(gr_regions = gr_window) %>%
+      left_join(select(bdg_tb,-bdg),by="name") %>%
+      group_by(name) %>%
+      mutate(x = case_when(start == min(start) ~ start,
+                           end == max(end) ~ end,
+                           TRUE ~ (start + end) / 2),
+             score = ifelse(type == "ctrl",-score,score))
+    
+    y_rng <- c(min(tb_sig$score*1.05),max(tb_sig$score)*1.1)
+    
+    tb_pks <- read_peak_file(fl_peaks) %>%
+      mutate(name = str_match(name,"^([[:alnum:]_]+)_all_peak.+$")[,2]) %>%
+      makeGRangesFromDataFrame(keep.extra.columns = TRUE) %>%
+      subset_and_trim_gr(gr_window) %>%
+      reduce %>%
+      as_tibble %>%
+      mutate(ymax = max(y_rng),
+             ymin = ymax - 0.05 * max(y_rng))
+    
+    tb_ses <- subset_and_trim_gr(gr_ses,gr_window) %>% 
+      as_tibble %>%
+      mutate(ymax = max(y_rng),
+             ymin = min(y_rng),
+             ymid = max(y_rng) - 0.25*max(y_rng),
+             label = paste0(region,"\n(rank ",rank,", ",peak_count," peaks)"))
+    
+    geom_pks  <- NULL
+    geom_sums <- NULL
+    if(nrow(tb_pks) > 0){
+      geom_pks<- list(
+        geom_rect(data=tb_pks,mapping=aes(xmin=start,xmax=end,ymin=ymin,ymax=ymax),fill='orange',color="black",linewidth=0.5,alpha=1,inherit.aes=FALSE),
+        geom_rect(data=tb_pks,mapping=aes(xmin=start,xmax=end,ymin=0,ymax=ymax),fill='orange',color=NA,alpha=0.2,inherit.aes=FALSE)
+      )
+    }
+    if(nrow(tb_ses) > 0){
+      geom_ses<- list(
+        geom_rect(data=tb_ses,mapping=aes(xmin=start,xmax=end,ymin=ymin,ymax=ymax),fill="orange",alpha=0.3,inherit.aes=FALSE),
+        geom_text(data=tb_ses,mapping=aes(x=(start+end)/2,y=ymid,label=label),inherit.aes=FALSE) ) 
+    }
+    p_sig <- ggplot(tb_sig,aes(x=x,ymin=0,ymax=score,fill=type)) +
+      scale_x_continuous(name= grange_desc(gr_window),expand=c(0,0),limits=x_rng,labels=prettyBP) +
+      scale_y_continuous(name= "Pileup",labels=function(x) ifelse(x>0,prettyNumbers(x),""),
+                         expand=c(0,0),limits=y_rng) +
+      scale_fill_manual(values=c("treat"="black","ctrl"="gray50")) +
+      geom_ses +
+      geom_pks +
+      geom_ribbon(color='black') +
+      theme(plot.background = element_rect(fill="white",color=NA),
+            plot.margin = unit(c(0,0,0,0),'lines'),
+            panel.background = element_blank(),
+            panel.border = element_rect(fill=NA,color="black"),
+            panel.grid = element_blank(),
+            panel.spacing.y = unit(0,"lines"),
+            strip.text.y.right = element_text(angle=0),
+            strip.background = element_blank(),
+            legend.title = element_blank()) %>% suppressWarnings()
+    
+    p_gns <- plot_genes(genomic_region = gr_window,gr_genes = gr_gns) +
+      theme(legend.position = 'none',
+            panel.grid = element_blank())
+    
+    p <- cowplot::plot_grid(p_gns,p_sig,ncol=1,align="v",axis='lr',rel_heights=c(2,5))
+    ggsave(out_file,p,"png",dpi=300,height=5,width = 10)
+  }
+  return(out_file)
+}
+```
+
+```{r }
+rose_res  <- rose_program(bams_trt = param_list$bams_test,
+                          bams_igg = param_list$bams_ctrl,
+                          peak_file = param_list$peak_file,
+                          gns_gtf = param_list$gene_gtf,
+                          out_tsv = tsv_output)
+```
+
+In the following plot, each stitched region is illustrated as a single point, and the calculated cutoff rank/area score is annotated with red dashed lines. Regions that are considered super-enhancers are shown in red, and the top 10 super-enhancers are labeled with their nearest gene annotations.
+```{r }
+p_file <- file.path("rose_curve.png")
+if(!file.exists(p_file)){
+  se  <- rose_res$se
+  tb_p<- rowData(se) %>%
+    as_tibble %>%
+    mutate(label = ifelse(se & rank < 10,nearest_gene,""))
+  
+  x_rank  <- filter(tb_p,se) %>% select(rank) %>% max
+  cutoff_value <- metadata(se)$area_cutoff
+  x_rng   <- c(1,max(tb_p$rank))
+  y_rng   <- c(0,max(tb_p$area))
+  
+  p <- ggplot(tb_p,aes(x=rank,y=area,color=se)) +
+    scale_x_continuous(name="Rank",labels = prettyNumbers) +
+    scale_y_continuous(name="Area (signal x width)",labels=prettyNumbers) +
+    scale_color_manual(values=c(`TRUE`="red",`FALSE`="black")) +
+    geom_hline(yintercept = cutoff_value,linewidth=0.5,color='red',linetype='dashed') +
+    geom_vline(xintercept = x_rank,linewidth=0.5,color='red',linetype='dashed') +
+    annotate(geom='text',x=x_rank,y=cutoff_value - 0.025 * diff(y_rng),label=paste0("  (",x_rank,",",round(cutoff_value,digits=1),")"),
+             hjust=0,vjust=1,color='red',size=3) +
+    geom_point() +
+    geom_point(data=filter(tb_p,se)) +
+    geom_text_repel(data=filter(tb_p,label != ""),mapping=aes(label=nearest_gene),
+                    nudge_y = 0.05 * diff(y_rng),
+                    nudge_x = 0.2 * diff(x_rng)) +
+    theme(plot.background = element_rect(fill="white",color=NA),
+          panel.background = element_blank(),
+          panel.border = element_rect(fill=NA,color="black"),
+          panel.grid.major = element_line(linewidth=0.5,color='gray85'),
+          legend.position = "none")
+  ggsave(p_file,p,'png',dpi=300,height=5,width=6,units='in')
+}
+```
+
+![](`r p_file`)
+
+# Top Super-enhancer regions {.tabset}
+
+The top 10 super-enhancer regions are illustrated here. All peaks are annotated with orange rectangles at the top of the panel and orange streaks below them. Super-enhancers are annotated with large light-colored streaks, and annotated with name, rank, and the number of narrowPeaks they contain. Signal is shown in black, and control signal (pooled IgG signal according to MACS3) is shown below the X-axis in gray.
+```{r results='asis'}
+gr_ses  <- rose_res$peaks %>% makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+gr_winds<- rose_res$peaks %>%
+  arrange(rank) %>%
+  filter(se) %>%
+  filter(row_number() <= 10) %>%
+  mutate(out_file = paste0("superenhancer_",rank,"_",region,".png")) %>%
+  makeGRangesFromDataFrame(keep.extra.columns = TRUE) %>%
+  resize(width=width(.) * 1.5,fix='center')
+
+lapply(1:length(gr_winds), function(i){
+  gr  <- gr_winds[i]
+  p_fl<- plot_region(gr_window = gr,gr_ses = gr_ses,out_file = gr$out_file)
+  cat("\n\n## ",gr$rank,"\n\n")
+  cat("![](",p_fl,")")
+}) %>% invisible
+```
+
+# Super-enhancer table
+
+This table contains all annotated super-enhancers and their basic annotations for this pool.
+```{r }
+se  <- rose_res$se
+rowData(se) %>%
+  as_tibble %>%
+  mutate(label = ifelse(se & rank < 10,nearest_gene,"")) %>%
+  filter(se) %>%
+  select(seqnames,start,end,width,peak_count,peaks,region,rank,nearest_gene,nearest_dist) %>%
+  arrange(rank) %>%
+  reactable(
+    defaultColDef = colDef(
+      header = function(value) gsub(".", " ", value, fixed = TRUE),
+      cell = function(value) format(value, nsmall = 1),
+      align = "center",
+      minWidth = 70,
+      headerStyle = list(background = "#f7f7f8")
+    ),
+    columns = list(
+      Species = colDef(minWidth = 140)  # overrides the default
+    ),
+    bordered = FALSE,
+    borderless = TRUE,
+    highlight = TRUE,
+    compact = TRUE,
+    striped = TRUE,
+    fullWidth=TRUE,
+    wrap = FALSE,
+    filterable = TRUE,
+    searchable = TRUE,
+    defaultPageSize = 50,
+    pageSizeOptions = c(10,25,50)
+)
+```

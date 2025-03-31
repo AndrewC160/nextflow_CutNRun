@@ -40,6 +40,7 @@ process poolReport {
     path "${pool_name}_report.html"
     path "${pool_name}_file_summary.tsv"
     path "*.tsv"
+    path "*.png"
   
   script:
   report_file="${pool_name}_report.html"

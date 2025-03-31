@@ -23,6 +23,12 @@ process peakCallingNarrowPooled {
     tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_summits.bed"), emit: "summits"
     tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_control_lambda.bdg.gz"), path("${samp_name}_control_lambda.bdg.gz.tbi"), emit: "ctrlBDG"
     tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_treat_pileup.bdg.gz"), path("${samp_name}_treat_pileup.bdg.gz.tbi"), emit: "treatBDG"
+    tuple val(sys_idx), val(samp_idx), val(samp_name), path(bams_input), path(bams_ctrl),
+      path("${samp_name}_peaks.narrowPeak"), 
+      path("${samp_name}_treat_pileup.bdg.gz"),
+      path("${samp_name}_treat_pileup.bdg.gz.tbi"), 
+      path("${samp_name}_control_lambda.bdg.gz"),
+      path("${samp_name}_control_lambda.bdg.gz.tbi"), emit: "ROSE"
     path "*.txt"
     path "*.tsv"
   
