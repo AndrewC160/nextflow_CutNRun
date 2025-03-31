@@ -10,9 +10,8 @@ params.dir_out
 params.control_epitope = "IgG"
 params.truncate_fastqs = true
 params.truncate_count = 100000
-params.run_rose = true
 params.run_meme = false
-params.run_cuts = true
+params.run_cuts = false
 
 // Directories.
 params.dir_modules = "${projectDir}/modules"
@@ -44,7 +43,6 @@ include { peakCallingNarrow } from "${params.dir_modules}/mod_peakCallingNarrow.
 include { peakCallingNarrowPooled } from "${params.dir_modules}/mod_peakCallingNarrowPooled.nf"
 include { peakCallingBroad } from "${params.dir_modules}/mod_peakCallingBroad.nf"
 include { peakCallingBroadPooled} from "${params.dir_modules}/mod_peakCallingBroadPooled.nf"
-include { ROSE } from "${params.dir_modules}/mod_ROSE.nf"
 include { calculateFRiP } from "${params.dir_modules}/mod_calculateFRiP.nf"
 include { combineSpikes } from "${params.dir_modules}/mod_combineSpikes.nf"
 include { getSequences as getSequences_summits } from "${params.dir_modules}/mod_getSequences.nf"
@@ -110,9 +108,12 @@ workflow {
   readFiltering_hg38(bamBest.out.hg38,"hg38",file(params.blacklist))
   readFiltering_sac3(bamBest.out.sac3,"sac3",file(params.blacklist))
   
+  
   // Peak calling.
   peakCallingNarrow(readFiltering_hg38.out.filtered,file(params.blacklist),file(params.seqsizes),params.dir_reps)
+  
   peakCallingBroad(readFiltering_hg38.out.filtered,file(params.blacklist),file(params.seqsizes),params.dir_reps)
+  
   
   // FRiP scores
   readFiltering_hg38.out.filtered
@@ -170,11 +171,8 @@ workflow {
       .map { it -> it[1][0,1] + it[0][1..2] }
       .set {ch_cuts}
       
-    getCutPoints_summits(ch_cuts.map{ row -> tuple(row[0,1,2]) },params.dir_pool,"summit").set {ch_cuts_summits}
-    getCutPoints_narrows(ch_cuts.map{ row -> tuple(row[0,1,3]) },params.dir_pool,"narrowPeak").set {ch_cuts_narrows}
-  }else{
-    Channel.of("Not run").set {ch_cuts_summits}
-    Channel.of("Not run").set {ch_cuts_narrows}
+    getCutPoints_summits(ch_cuts.map{ row -> tuple(row[0,1,2]) },params.dir_pool,"summit")
+    getCutPoints_narrows(ch_cuts.map{ row -> tuple(row[0,1,3]) },params.dir_pool,"narrowPeak")
   }
   if(params.run_meme){
     // Retrieve peak sequences.
@@ -191,15 +189,6 @@ workflow {
   
     // CENTRIMO
     memeCENTRIMO(getSequences_summits.out.seqs,params.motif_db,"summits")
-  }
-  
-  // Rank Ordering of Super-Enhancers (ROSE).
-  if(params.run_rose){
-    ROSE(peakCallingNarrowPooled.out.ROSE,
-      file("${params.dir_R}/ROSE_asclab.Rmd"),
-      file("${params.dir_R}/R_functions/"),
-      file(params.gene_gtf),
-      file(params.gene_gtf_idx))
   }
   
   // Pool report.
@@ -256,7 +245,7 @@ workflow {
   peakCallingNarrowPooled.out.treatBDG.map { row -> row[1,3,4]}.set { rpt_npks_bdgs_pool }
   peakCallingNarrowPooled.out.ctrlBDG.map { row -> row[1,3,4]}.set { rpt_npks_bdgs_ctrl_pool }
   peakCallingBroadPooled.out.broadPeaks.map { row -> row[1,3] }.set{ rpt_bpks_bpks_pool }
-
+  
   rpt_fqc_trim
     .join(rpt_fqc_filt)
     .join(rpt_spike)
@@ -282,4 +271,7 @@ workflow {
     file(params.seqsizes),
     file(params.gene_gtf),
     file(params.gene_gtf_idx))
+  
+// ROSE
+
 }
