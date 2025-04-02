@@ -157,32 +157,42 @@ To test/troubleshoot pipeline outputs, “stub” files can be generated: an opt
 
 ## Output
 
-Output file structure is separated into `pooled` and `replicate` folders, with analyses run on individual replicates stored in the latter. Peak calling is performed by [`MACS3`](https://github.com/macs3-project/MACS). For individual replicates, no background is used: signal in a given region is compared to signal across the genome. Note that this is not ideal, particularly in samples with complex genomes. `MACS3` performs pooled peak calling by concatenating all replicates (treatment and background), then calling peaks using background samples to normalize for sequencing biases, copy number, etc. Note that this pipeline runs under the assumption that treatment and background samples should be produced within *the same sequencing run*, *the same cell type*, and *under the same conditions*. To modify this, alter the columns in the input CSV.
+Output files are stored in the directory specified using --dir_out, within which pooled and replicate folders will be created. Analyses of pooled samples are stored in the former, individual replicates in the latter. Peak calling is performed by MACS3. For individual replicates, no background is used: signal in a given region is compared to signal across the genome. This is not ideal, particularly in samples with complex genomes. For pooled peak calling, MACS3 concatenates all replicates (treatment and background), then calls peaks using background samples to normalize for sequencing biases, copy number, etc. Note that this pipeline runs under the assumption that treatment and background samples were produced within the same sequencing run, the same cell type, and under the same conditions. To modify this, alter the columns in the input CSV. For instance, to use IgG background samples from one sequencing project as controls for another, assign the replicates the same project name. This is not advised, however, as background samples should be produced alongside treatment samples.
 
-For instance, to use IgG background samples from one sequencing project as controls for another project, assign the replicates the same project name. This is not advised, however.
+Among the outputs for each pool, the _spike.tsv file includes read counts as well as the total number of reads aligned to the primary genome vs. the spike genome. This is useful when normalizing signal between samples. The _report.html file includes basic quality control metrics and plots of pileup among high-scoring peaks, and the _file_summary.tsv file contains output file locations.
 ```
 data
 ├── pooled
-│   ├── H358_MYC_WG
-│   │   ├── meme
-│   │   │   ├── centrimo
-│   │   │   ├── fimo
-│   │   │   └── sea
-│   │   ├── peaks
-│   │   │   └── cuts
-│   │   └── qc
+│   ├── H358_MYC_WT_run1
+│   │   ├── meme
+│   │   │   ├── centrimo
+│   │   │   ├── fimo
+│   │   │   └── sea
+│   │   ├── peaks
+│   │   │   └── cuts
+│   │   ├── qc
+│   │   │   └── H358_MYC_WT_run1_report.html
+│   │   ├── ROSE
+│   │   |   ├── H358_MYC_WT_run1_ROSEoutput.rds
+│   │   |   ├── H358_MYC_WT_run1_ROSEoutput.tsv
+│   │   │   └── H358_MYC_WT_run1_ROSE.html
+│   │   ├── H358_MYC_WT_spike.tsv
+│   │   └── H358_MYC_WT_run1_file_summary.tsv
 └── replicates
     ├── H358_MYC_WT_1
-    │   ├── align
-    │   ├── peaks
-    │   └── qc
+    │   ├── align
+    │   ├── peaks
+    │   └── qc
     ├── H358_MYC_WT_2
-    │   ├── align
-    │   ├── peaks
-    │   └── qc
-    └── H358_IgG_WG_1
+    │   ├── align
+    │   ├── peaks
+    │   └── qc
+    └── H358_IgG_WT_1
         ├── align
         ├── peaks
-        └── qc
-  
+        └── qc  
 ```
+
+### nextflow_cutNrun/work
+
+By default, Nextflow will generate a `work` directory in the working directory from which it is executed, typically the `nextflow_cutNrun` directory. These folders contains all subsequent steps in the pipeline, and to understand their application and the finer points of pipeline troubleshooting please see the [Nextflow documentation](https://www.nextflow.io/docs/latest/cache-and-resume.html). These files should not be necessary beyond troubleshooting and caching, and they can be safely deleted once a pipeline has been completed to free up disk space. Note that once removed (either via `rm -r` or `nextflow clean`), however, subsequent pipeline runs cannot be `-resume`d, and if run *the pipeline will repeat all steps and replace files in the `--out_dir` directory with fresh copies*. This is because the `work` directory files are tracked for caching, *not* the files in the output directory.
