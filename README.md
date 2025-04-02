@@ -133,7 +133,7 @@ Each replicate should have a unique combination of project/cell_line/epitope/rep
 
 Enable with `--run_rose true`.
 
-By default, pooled `narrowPeak` data along with control/background BAM files are subjected to a custom abbreviated implementation of the [Rank Ordering of Super-enhancers](https://www.sciencedirect.com/science/article/pii/S221501612030385X) protocol designed to detect super-enhancers among signal peaks. Note that the usefulness of ROSE will depend on the epitope studied, and is typically applied to Mediator/H3K27Ac binding. ROSE results are stored in the pooled sample `ROSE` directory, and include a summary HTML, a TSV file of annotated super-enhancers, and an RDS file that contains a [SummarizedExperiment](https://www.bioconductor.org/packages/release/bioc/html/SummarizedExperiment.html) object that can be read into R directly:
+By default, pooled `narrowPeak` data along with control/background BAM files are subjected to a custom abbreviated implementation of the [Rank Ordering of Super-enhancers](https://www.sciencedirect.com/science/article/pii/S221501612030385X) protocol designed to detect super-enhancers among signal peaks. Note that the usefulness of ROSE will depend on the epitope studied, and is typically applied to Mediator/H3K27Ac. ROSE results are stored in the pooled sample `ROSE` directory, and include a summary HTML, a TSV file of annotated super-enhancers, and an RDS file that contains a [SummarizedExperiment](https://www.bioconductor.org/packages/release/bioc/html/SummarizedExperiment.html) object that can be read into R directly:
 
 ```
 library(SummarizedExperiment)               # Library for using SummarizedExperiments.
