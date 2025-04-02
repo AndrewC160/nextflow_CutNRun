@@ -87,15 +87,15 @@ Only required if [MEME Suite](https://meme-suite.org/meme/0) functions are used.
 
 #### Gene annotation GTF
 
---gene_gtf hg38_genes.gtf
+`--gene_gtf hg38_genes.gtf`
 
-GTF file of gene annotations, for instance from UCSC GoldenPath This file should also be bgzipped and indexed.
-
-
+GTF file of gene annotations, for instance from [UCSC GoldenPath](https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/hg38.knownGene.gtf.gz) This file should also be bgzipped and indexed.
 
 ## Execution
 
-The Nextflow pipeline is executed within the `conda` environment using the command:
+The cutNrun.nf script is the workflow for the pipeline. When run, this script will subsequently call module scripts (stored in the modules directory) that contain specific steps for each process. Additional R scripts that will be called are included in the R folder, including a parameterized RMarkdown that will be used to generate an output document.
+
+The Nextflow pipeline is executed (within the active `conda` environment) using the command:
 ```
 nextflow run cutNrun.nf \
   --sample_table <sample_table> \
@@ -105,13 +105,15 @@ nextflow run cutNrun.nf \
 
 At minimum, three parameters should be provided to the nextflow pipeline, as well:
 
-`-sample_table`: Filename of the input CSV file containing all sample details.
+`--sample_table`: Filename of the input CSV file containing all sample details.
 
-`-dir_out`: Output directory into which outputs will be published.
+`--dir_out`: Output directory into which outputs will be published.
 
-`-control_epitope`: Control epitope used for background signal, typically "IgG". This value must match at least one sample within the `sample_table` *per sample/condition combination*. All cell line/condition combinations are expected to have at least one background sample.
+`--control_epitope`: Control epitope used for background signal, typically "IgG". This value must match at least one sample within the `sample_table` *per sample/condition combination*. All cell line/condition combinations are expected to have at least one background sample.
 
-### Input table
+For the pooling process to run, each cell line/condition combination (pool) is expected to have at least one background sample; those without are only run through the replicate phase of the pipeline. It is also possible for background samples to apply to multiple pools: for instance, an IgG background in WT H358 cells can be used in one pool testing for KLF5 binding and another for H3K27 acetlyation.
+
+### Sample table
 
 The primary input of the `cutNrun.nf` pipeline is a CSV file containing one sample per row with annotations for each file and FastQ files for reads 1 and 2. The table format is:
 
@@ -120,6 +122,38 @@ project | name | cell_line | epitope | condition | replicate | R1 | R2
 run1 | H358_MYC_WT_1 | H358      | MYC     | WT        |     1     | R1.fastq.gz | R2.fastq.gz
 run1 | H358_MYC_WT_1 | H358      | MYC     | WT        |     2     | R1.fastq.gz | R2.fastq.gz
 run1 | H358_IgG_WT_1 | H358      | IgG     | WT        |     1     | R1.fastq.gz | R2.fastq.gz
+
+Each replicate should have a unique combination of project/cell_line/epitope/replicate IDs. Sample names are currently allowed, but output names for replicates and pools are constructed using `project/cell line/epitope/replicate/condition` tags:
+
+> Replicates: `<cell_line>_<epitope>_<condition>_<replicate>`
+
+> Pools: `<cell_line>_<epitope>_<condition>_<project>`
+
+### ROSE (Optional)
+
+Enable with `--run_rose true`.
+
+By default, pooled narrowPeak data along with control/background BAM files are subjected to an abbreviated custom implementation of the [Rank Ordering of Super-enhancers](https://www.sciencedirect.com/science/article/pii/S221501612030385X) protocol designed to detect super-enhancers among signal peaks. These results are stored in the pooled sample `ROSE` directory, and include a summary HTML, a TSV file of annotated super-enhancers, and an RDS file that contains a SummarizedExperiment object that can be read into R directly (`se <- readRDS("rose_results.rds")` with raw/normalized scores (available via `assay(se,"counts")` and `assay(se,"norm")`, respectively), library information (`colData(se)`), and region annotations (`rowData(se)`) including super-enhancer status, nearest genes, peaks encompassed, etc. Note that the usefulness of ROSE will depend on the epitope studied, and is typically applied to Mediator/H3K27Ac binding. 
+
+### MEME Suite (Optional)
+
+Enable with `--run_meme true`.
+
+Processes are included for three [MEME Suite](https://meme-suite.org/meme/) functions to detect DNA binding motifs among peak summits. Note that broadPeaks and often narrowPeaks can be large enough that many MEME functions are prohibitively slow. The functions currently implemented include:
+
+-[SEA](https://meme-suite.org/meme/tools/sea): Simple Enrichment analysis; determines if any motifs are significantly enriched within peak summits relative to randomized sequences of the same FASTA.
+
+-[CENTRIMO](https://meme-suite.org/meme/tools/centrimo): Determine if motifs have a significant preference for a location within peak summits.
+
+-[FIMO](https://meme-suite.org/meme/tools/fimo): Finding Individual Motif Occurences; identifies DNA binding motifs within peak summits.
+
+### Stub files (Optional)
+
+To test/troubleshoot pipeline outputs, “stub” files can be generated: an optional process will truncate all raw FASTQ files to include a limited number of reads (limit specified via `--trunc_count`) that will process quickly and allow the entire pipeline to run to completion. For instance, to prepare a stub run using 1 million reads, provide the following two arguments:
+```
+--truncate_fastqs true \
+--truncate_count 1000000
+```
 
 ## Output
 
