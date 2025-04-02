@@ -24,7 +24,74 @@ The environment can then be activated using:
 
 `PATH=$(readlink -e ngsutilsj):$PATH`
 
-This pipeline is also is missing R packages `clugPac`, `ascFunctions`, and `ascCutNRun`. These are not necessary for any steps other than the final report, and they will be updated shortly.
+This pipeline is also is missing R packages `clugPac`, `ascFunctions`, and `ascCutNRun`. These will be updated later, but for now essential functions are included in the R/R_functions directory which is sourced as necessary. All other R packages are included within the `conda_evn.yml` file.
+
+## Configuration
+
+By default Nextflow will operate within the bounds of the system it is run on (i.e. respecting memory/CPU limitations, etc.), but the nextflow.config file can be edited to set these limits explicitly.
+
+### Resources
+
+This pipeline requries several accessory files to run, and these are typically stored in a resources directory. This folder can be saved in the `nextflow_cutNrun` directory, or it can be specified using the `--dir_resources` argument. This folder should contain the following (though specific locations for each can be provided separately):
+
+#### Bowtie2 indices
+
+`--bt2_idx /path/to/bowtie2_index/hg38/hg38` (Primary genome, hg38 for instance)
+
+`--bt2_spike /path/to/bowtie2_index/sac3/sac3` (Spike genome, Sac3 for instance)
+
+Alignment is performed using [Bowtie2](https://bowtie-bio.sourceforge.net/bowtie2/index.shtml), and so a Bowtie2 index is required for both the sample and spike genomes. [These can be generated manually](https://bowtie-bio.sourceforge.net/bowtie2/manual.shtml#indexing-a-reference-genome), but many pre-built indices are available for download ([here](https://benlangmead.github.io/aws-indexes/bowtie), for instance).
+
+A Bowtie index should consist of a single directory *named after the genome*. Within this directory, Bowtie files should all have a prefix that matches the containing folder. For instance, the Bowtie2 index for the `hg38` genome is:
+```
+hg38
+├── hg38.1.bt2
+├── hg38.2.bt2
+├── hg38.3.bt2
+├── hg38.4.bt2
+├── hg38.rev.1.bt2
+└── hg38.rev.2.bt2
+```
+
+The index directories should be provided to the pipeline with the index prefix using the for the primary genome and for spike the genome.
+
+#### Genome FASTA
+
+`--fasta fasta/filename.fa`
+
+Only required if MEME Suite functions are to be used.
+
+#### Genome blacklists
+
+--blacklist blacklist_file.bed
+
+A bedfile of genomic blacklists should be provided. These are available for many genomes here, but keep in mind these files should be unzipped.
+
+#### Seqsizes
+
+--seqsizes hg38_seqsizes.tsv
+
+TSV file with two columns: one for chromosome names, another for their length in basepairs. For instance:
+```
+chr1    248956422
+chr2    242193529
+chr3    198295559
+chr4    190214555
+```
+
+#### Motif database
+
+`--motif_db motif_database.meme`
+
+Only required if [MEME Suite](https://meme-suite.org/meme/0) functions are used. MEME file of transcription factor binding motifs to search for, for instance [HOCOMOCO-v12](https://hocomoco12.autosome.org/downloads_v12).
+
+#### Gene annotation GTF
+
+--gene_gtf hg38_genes.gtf
+
+GTF file of gene annotations, for instance from UCSC GoldenPath This file should also be bgzipped and indexed.
+
+
 
 ## Execution
 
