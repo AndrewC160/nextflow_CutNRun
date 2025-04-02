@@ -63,13 +63,13 @@ Only required if MEME Suite functions are to be used.
 
 #### Genome blacklists
 
---blacklist blacklist_file.bed
+`--blacklist blacklist_file.bed`
 
 A bedfile of genomic blacklists should be provided. These are available for many genomes here, but keep in mind these files should be unzipped.
 
 #### Seqsizes
 
---seqsizes hg38_seqsizes.tsv
+`--seqsizes hg38_seqsizes.tsv`
 
 TSV file with two columns: one for chromosome names, another for their length in basepairs. For instance:
 ```
@@ -93,7 +93,7 @@ GTF file of gene annotations, for instance from [UCSC GoldenPath](https://hgdown
 
 ## Execution
 
-The cutNrun.nf script is the workflow for the pipeline. When run, this script will subsequently call module scripts (stored in the modules directory) that contain specific steps for each process. Additional R scripts that will be called are included in the R folder, including a parameterized RMarkdown that will be used to generate an output document.
+The `cutNrun.nf` script is the workflow for the pipeline. When run, this script will subsequently call module scripts (stored in the modules directory) that contain specific steps for each process. Additional R scripts that will be called are included in the R folder, including a parameterized RMarkdown that will be used to generate an output document.
 
 The Nextflow pipeline is executed (within the active `conda` environment) using the command:
 ```
