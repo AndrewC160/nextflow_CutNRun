@@ -4,7 +4,7 @@
 
 The `cutNrun.nf` script is the base script for the pipeline. When run, this script will subsequently call module scripts (stored in the `modules` directory) that contain specific steps for each process. Additional R scripts that will be called are included in the `R` folder, including a parameterized RMarkdown that will be used to generate an output document.
 
-![*Example Cut&Run pipeline for KLF5 detection using an IgG background.*](https://github.com/user-attachments/assets/befeb93d-0720-43d1-aed0-74f950c133a8)
+![*Example Cut&Run pipline flowchart for KLF5 detection with a *Sac3* spike and an IgG background.*](https://github.com/user-attachments/assets/878a9583-208c-41ec-8ca5-03119510b34c)
 
 ## Installation
 
