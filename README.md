@@ -133,7 +133,18 @@ Each replicate should have a unique combination of project/cell_line/epitope/rep
 
 Enable with `--run_rose true`.
 
-By default, pooled narrowPeak data along with control/background BAM files are subjected to an abbreviated custom implementation of the [Rank Ordering of Super-enhancers](https://www.sciencedirect.com/science/article/pii/S221501612030385X) protocol designed to detect super-enhancers among signal peaks. These results are stored in the pooled sample `ROSE` directory, and include a summary HTML, a TSV file of annotated super-enhancers, and an RDS file that contains a SummarizedExperiment object that can be read into R directly (`se <- readRDS("rose_results.rds")` with raw/normalized scores (available via `assay(se,"counts")` and `assay(se,"norm")`, respectively), library information (`colData(se)`), and region annotations (`rowData(se)`) including super-enhancer status, nearest genes, peaks encompassed, etc. Note that the usefulness of ROSE will depend on the epitope studied, and is typically applied to Mediator/H3K27Ac binding. 
+By default, pooled narrowPeak data along with control/background BAM files are subjected to an abbreviated custom implementation of the [Rank Ordering of Super-enhancers](https://www.sciencedirect.com/science/article/pii/S221501612030385X) protocol designed to detect super-enhancers among signal peaks. These results are stored in the pooled sample `ROSE` directory, and include a summary HTML, a TSV file of annotated super-enhancers, and an RDS file that contains a SummarizedExperiment object that can be read into R directly:
+
+```
+se <- readRDS("rose_results.rds")   # Load SummarizedExperiment.
+raw_counts   <- assay(se,"counts")  # Access raw count matrix.
+norm_counts  <- assay(se,"norm")    # Access normalized count matrix.
+lib_info     <- colData(se)         # Get library information (BAM files, read counts, weights,etc.).
+region_info  <- rowData(se)         # Get peak region information (Stitched regions, rank, scores, nearest gene's, etc.).
+se_cutoff    <- metadata(se)        # Super-enhancer area cutoff.
+```
+
+with raw/normalized scores (available via `assay(se,"counts")` and `assay(se,"norm")`, respectively), library information (`colData(se)`), and region annotations (`rowData(se)`) including super-enhancer status, nearest genes, peaks encompassed, etc. Note that the usefulness of ROSE will depend on the epitope studied, and is typically applied to Mediator/H3K27Ac binding. 
 
 ### MEME Suite (Optional)
 
