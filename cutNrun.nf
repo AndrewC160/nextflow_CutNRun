@@ -8,7 +8,7 @@
 params.sample_table
 params.dir_out
 params.control_epitope = "IgG"
-params.truncate_fastqs = true
+params.truncate_fastqs = false
 params.truncate_count = 100000
 params.run_rose = true
 params.run_meme = false
