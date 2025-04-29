@@ -9,25 +9,25 @@ output:
     theme: spacelab
     code_folding: hide
 params:
-  pool_name: "OS526_K27Ac_KO_Project_ACEH_EH005"
+  pool_name: "OS526_FOSL2_NONE_antibody_survey"
   ctrl_epitope: "IgG"
-  sample_table: "stump_file_table.csv"
-  output_dir: "/N/p/asclab/ASC-cutNrun/nextflow/data"
+  sample_table: "file_table.csv"
+  output_dir: "/N/p/asclab/ASC-cutNrun/25APR26-antibody_survey/data"
   R_dir: "R_functions"
-  fastqc_trim1: "OS526_K27Ac_KO_2_val_1_fastqc.zip OS526_K27Ac_KO_1_val_1_fastqc.zip"
-  fastqc_trim2: "OS526_K27Ac_KO_2_val_2_fastqc.zip OS526_K27Ac_KO_1_val_2_fastqc.zip"
-  fastqc_filt: "OS526_K27Ac_KO_2_hg38_short_fastqc.zip OS526_K27Ac_KO_1_hg38_short_fastqc.zip"
-  tsv_spike: "OS526_K27Ac_KO_2_spike.tsv OS526_K27Ac_KO_1_spike.tsv"
-  npks_reps: "OS526_K27Ac_KO_2_peaks.narrowPeak OS526_K27Ac_KO_1_peaks.narrowPeak"
-  bdgs_reps: "OS526_K27Ac_KO_2_treat_pileup.bdg.gz OS526_K27Ac_KO_1_treat_pileup.bdg.gz"
-  bdgs_reps_ctrl: "OS526_K27Ac_KO_1_control_lambda.bdg.gz OS526_K27Ac_KO_2_control_lambda.bdg.gz"
-  bpks_reps: "OS526_K27Ac_KO_2_peaks.broadPeak OS526_K27Ac_KO_1_peaks.broadPeak"
-  tsvs_frip: "OS526_K27Ac_KO_2_narrowPeaks_FRiP.txt OS526_K27Ac_KO_1_narrowPeaks_FRiP.txt"
-  npks_pool: "OS526_K27Ac_KO_peaks.narrowPeak"
-  sums_pool: "OS526_K27Ac_KO_summits.bed"
-  bdgs_pool: "OS526_K27Ac_KO_treat_pileup.bdg.gz"
-  bdgs_pool_ctrl: "OS526_K27Ac_KO_control_lambda.bdg.gz"
-  bpks_pool: "OS526_K27Ac_KO_peaks.broadPeak"
+  fastqc_trim1: "OS526_FOSL2_NONE_1_val_1_fastqc.zip"
+  fastqc_trim2: "OS526_FOSL2_NONE_1_val_2_fastqc.zip"
+  fastqc_filt: "OS526_FOSL2_NONE_1_hg38_short_fastqc.zip"
+  tsv_spike: "OS526_FOSL2_NONE_1_spike.tsv"
+  npks_reps: "OS526_FOSL2_NONE_1_peaks.narrowPeak"
+  bdgs_reps: "OS526_FOSL2_NONE_1_treat_pileup.bdg.gz"
+  bdgs_reps_ctrl: "OS526_FOSL2_NONE_1_control_lambda.bdg.gz"
+  bpks_reps: "OS526_FOSL2_NONE_1_peaks.broadPeak"
+  tsvs_frip: "OS526_FOSL2_NONE_1_narrowPeaks_FRiP.txt"
+  npks_pool: "OS526_FOSL2_NONE_peaks.narrowPeak"
+  sums_pool: "OS526_FOSL2_NONE_summits.bed"
+  bdgs_pool: "OS526_FOSL2_NONE_treat_pileup.bdg.gz"
+  bdgs_pool_ctrl: "OS526_FOSL2_NONE_control_lambda.bdg.gz"
+  bpks_pool: "OS526_FOSL2_NONE_peaks.broadPeak"
   gene_gtf: "Homo_sapiens.GRCh38.104.chr.tabix.gtf.gz"
   seqsizes: "hg38_seqsizes.tsv"
 ---
@@ -64,7 +64,8 @@ knitr::opts_chunk$set(echo = TRUE,fig.width = 10,fig.height = 6,warning = FALSE,
 ##
 #
 
-#knitr::opts_knit$set(root.dir = "/N/p/asclab/ASC-cutNrun/nextflow/report_test")
+#knitr::opts_knit$set(root.dir = "/N/p/asclab/ASC-cutNrun/25APR26-antibody_survey/work/08/7ea608b9b4759b3ef494733e4039a9")
+#setwd("/N/p/asclab/ASC-cutNrun/25APR26-antibody_survey/work/08/7ea608b9b4759b3ef494733e4039a9")
 
 #
 ##
@@ -916,8 +917,9 @@ p_file <- c(param_list$bpks_pool,param_list$bpks_reps) %>%
 ![](`r p_file`)
 
 ## FRiP
-```{r plotFrip,height=4,width=6}
+```{r plotFrip,results='asis'}
 p_file <- file.path("frip_narrowPeaks.png")
+p_error<- TRUE
 if(!file.exists(p_file)){
   tb_p <- lapply(param_list$tsvs_frip,function(fl_nm) {
     fread(fl_nm) %>%
@@ -925,23 +927,29 @@ if(!file.exists(p_file)){
       mutate(name = gsub("_narrowPeaks_FRiP.txt","",fl_nm))
   }) %>% do.call(rbind,.)
   
-  p <- ggplot(tb_p,aes(x=name,y=frip)) +
-    scale_y_continuous(name="FRiP",labels=percent,limits=c(0,1),expand=c(0,0)) +
-    geom_bar(stat='identity',color='black',linewidth=0.25) +
-    ggtitle("Fraction of Reads in Peaks") +
-    theme(plot.background = element_rect(fill='white',color=NA),
-          panel.background = element_blank(),
-          panel.border = element_rect(fill=NA,color="black",linewidth = 0.5),
-          panel.grid.major.x = element_blank(),
-          panel.grid.major.y = element_line(linewidth=0.5,color='gray85'),
-          strip.background = element_blank(),
-          axis.text.x = element_text(angle=45,hjust=1,vjust=1),
-          axis.title.x = element_blank())
-  ggsave(p_file,p,"png",dpi=300,height=4,width=2 + length(unique(tb_p$name)))
+  if(!unlist(tb_p) %>% is.na %>% any){
+    p_error <- FALSE
+    p <- ggplot(tb_p,aes(x=name,y=frip)) +
+      scale_y_continuous(name="FRiP",labels=percent,limits=c(0,1),expand=c(0,0)) +
+      geom_bar(stat='identity',color='black',linewidth=0.25) +
+      ggtitle("Fraction of Reads in Peaks") +
+      theme(plot.background = element_rect(fill='white',color=NA),
+            panel.background = element_blank(),
+            panel.border = element_rect(fill=NA,color="black",linewidth = 0.5),
+            panel.grid.major.x = element_blank(),
+            panel.grid.major.y = element_line(linewidth=0.5,color='gray85'),
+            strip.background = element_blank(),
+            axis.text.x = element_text(angle=45,hjust=1,vjust=1),
+            axis.title.x = element_blank())
+    ggsave(p_file,p,"png",dpi=300,height=4,width=2 + length(unique(tb_p$name)))
+  }
+}
+if(p_error){
+  cat("\n\n> NA values detected in FRiP table.")
+}else{
+  cat("\n\n[](",p_file,")")
 }
 ```
-
-![](`r p_file`)
 
 ## Peak stats {.tabset}
 ```{r peakFunction}
@@ -999,7 +1007,8 @@ peak_plot <- function(peak_file_list,p_title="NarrowPeaks",file_suffix="_peaks.n
 p_file <- file.path("peak_summaryStats_replicates.png")
 if(!file.exists(p_file)){
   p_nar <- peak_plot(param_list$npks_reps,"NarrowPeaks","_peaks.narrowPeak")
-  p_brd <- peak_plot(param_list$bpks_reps,"BroadPeaks","_peaks.broadPeak",theme_addendum = theme(axis.title.y = element_blank()))
+  p_brd <- peak_plot(peak_file_list = param_list$bpks_reps,p_title = "BroadPeaks",file_suffix = "_peaks.broadPeak",
+                     theme_addendum = theme(axis.title.y = element_blank()))
   
   p <- cowplot::plot_grid(p_nar,p_brd,nrow=1,align='h',axis='tb')
   ggsave(p_file,p,'png',dpi=300,height=8,width=3 + 2*length(param_list$npks_reps))

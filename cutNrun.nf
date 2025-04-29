@@ -10,7 +10,7 @@ params.dir_out
 params.control_epitope = "IgG"
 params.truncate_fastqs = false
 params.truncate_count = 100000
-params.run_rose = true
+params.run_rose = false
 params.run_meme = false
 params.run_cuts = true
 
