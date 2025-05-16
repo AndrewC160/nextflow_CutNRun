@@ -11,7 +11,9 @@ params.control_epitope = "IgG"
 params.truncate_fastqs = false
 params.truncate_count = 100000
 params.run_rose = false
-params.run_meme = false
+params.run_fimo = false
+params.run_sea = false
+params.run_centrimo = false
 params.run_cuts = true
 
 // Directories.
@@ -114,7 +116,7 @@ workflow {
   peakCallingNarrow(readFiltering_hg38.out.filtered,file(params.blacklist),file(params.seqsizes),params.dir_reps)
   peakCallingBroad(readFiltering_hg38.out.filtered,file(params.blacklist),file(params.seqsizes),params.dir_reps)
   
-  // FRiP scores
+  // FRiP scores.
   readFiltering_hg38.out.filtered
     .filter { !it[4].contains(params.control_epitope) }
     .map { row -> row[0,1,3,5] }
@@ -176,21 +178,18 @@ workflow {
     Channel.of("Not run").set {ch_cuts_summits}
     Channel.of("Not run").set {ch_cuts_narrows}
   }
-  if(params.run_meme){
-    // Retrieve peak sequences.
-    getSequences_summits(peakCallingNarrowPooled.out.summits,params.fasta,"summits")
-    getSequences_narrows(peakCallingNarrowPooled.out.narrowPeaks,params.fasta,"narrowPeaks")
-    
-    // SEA
-    memeSEA(getSequences_summits.out.seqs,params.motif_db,"summits")
   
-    
-    // FIMO
-    memeFIMO_summits(getSequences_summits.out.seqs,params.motif_db,"summits")
-    //memeFIMO_narrows(getSequences_narrows.out.seqs,params.motif_db,"narrowPeaks")
-  
-    // CENTRIMO
-    memeCENTRIMO(getSequences_summits.out.seqs,params.motif_db,"summits")
+  // Retrieve peak sequences.
+  getSequences_summits(peakCallingNarrowPooled.out.summits,params.fasta,"summits")
+  getSequences_narrows(peakCallingNarrowPooled.out.narrowPeaks,params.fasta,"narrowPeaks")
+  if(params.run_fimo){
+    memeFIMO_summits(getSequences_summits.out.seqs,file(params.motif_db),"summits")
+  }
+  if(params.run_sea){
+    memeSEA(getSequences_summits.out.seqs,file(params.motif_db),"summits")
+  }
+  if(params.run_centrimo){
+    memeCENTRIMO(getSequences_summits.out.seqs,file(params.motif_db),"summits")
   }
   
   // Rank Ordering of Super-Enhancers (ROSE).

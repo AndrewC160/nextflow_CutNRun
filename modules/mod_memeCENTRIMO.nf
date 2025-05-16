@@ -18,8 +18,8 @@ process memeCENTRIMO {
   script:
   """
   centrimo --oc ./ ${fasta_file} ${motif_file} || echo "processed"
-  for file in \$(ls ./*); do
-    mv \$file ${prefix}_\$(basename \$file)
-  done
+  #for file in \$(ls ./*); do
+  #  mv \$file ${prefix}_\$(basename \$file)
+  #done
   """
 }

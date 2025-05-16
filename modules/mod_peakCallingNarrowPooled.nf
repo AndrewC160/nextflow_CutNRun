@@ -66,8 +66,8 @@ process peakCallingNarrowPooled {
   wc -l ${pks1} > ${rpt_blacklist}
   wc -l ${pks2} >> ${rpt_blacklist}
   
-  # Slop summit regions to 201bp windows.
-  bedtools slop -i ${sums2} -g ${seqsize_tsv} -b 100 > ${sums3} || true
+  # Slop summit regions to 1001bp windows.
+  bedtools slop -i ${sums2} -g ${seqsize_tsv} -b 500 > ${sums3} || true
   
   # Rename, BGZip, and index bedgraph files.
   mv ${bdg_ctrl1} ${bdg_ctrl2}

@@ -170,7 +170,7 @@ fq_raw  <- lapply(names(fq_raw1), function(nm){
 ```
 
 ### Flag summary
-```{r fastqcSummary,fig.height=6,fig.width=6}
+```{r fastqcSummary,,fig.height=3,fig.width=2}
 p_file<- file.path("fastqc_flags_trimmed.png")
 if(!file.exists(p_file)){
   tb_p  <- fq_raw$summary %>%
@@ -375,7 +375,7 @@ fq_hg38 <- read_fastqc(param_list$fastqc_filt)
 ```
 
 ### Flag summary
-```{r fastqcSummaryFilt,fig.height=6,fig.width=6}
+```{r fastqcSummaryFilt,,fig.height=3,fig.width=2}
 p_file <- file.path("fastqc_flags_filtered.png")
 if(!file.exists(p_file)){
   tb_p  <- fq_hg38$summary %>%
@@ -549,7 +549,7 @@ Alignment percentages are calculated as **reads successfully mapped to hg38 or s
 When calculating scores between samples, the ratio of *Sac3* to *hg38* reads can be used to normalize: we assume all samples had an equivalent number of *Sac3* reads spiked, and thus **any missing *Sac3* reads indicate missing *hg38* reads as well**. For this reason, we can *scale down reads of all samples to match the sample with the lowest ratio*. In other words, **we assume the lowest ratio sample lost reads and so we down-sample all others to match it.**
 
 For instance, if **SampleA** has a ratio of 0.02 and **SampleB** has a ratio of 0.01, each ratio is divided into 0.01 to give factors of 0.5 (**SampleA**) and 1 (**SampleB**). A peak with 100 reads in **SampleA** and 50 reads in **SampleB** would be multiplied by their respective factors to both be 50.
-```{r loadSpikes,fig.height=6,fig.width=8}
+```{r loadSpikes,fig.height=3,fig.width=3}
 p_file  <- file.path("alignment_read_counts.png")
 if(!file.exists(p_file)){
   type_levs=c(ambiguous="gray",unmapped="pink",sac3="purple",hg38="darkgreen")
@@ -726,7 +726,7 @@ plot_peak_enrichment<- function(peak_fls,chrom_gr=gr_chroms,iterations=20,p_file
 ```
 
 ### narrowPeaks
-```{r fig.height=6,fig.width=8}
+```{r fig.height=4,fig.width=5}
 p_file <- c(param_list$npks_pool,param_list$npks_reps) %>%
   setNames(gsub("_peaks.narrowPeak","",.)) %>%
   plot_peak_enrichment(p_file=file.path("tssDistance_narrowPeaks.png"))
@@ -735,7 +735,7 @@ p_file <- c(param_list$npks_pool,param_list$npks_reps) %>%
 ![](`r p_file`)
 
 ### broadPeaks
-```{r fig.height=6,fig.width=8}
+```{r fig.height=4,fig.width=5}
 p_file <- c(param_list$bpks_pool,param_list$bpks_reps) %>% 
   setNames(gsub("_peaks.broadPeak","",.)) %>%
   plot_peak_enrichment(p_file=file.path("tssDistance_broadPeaks.png"))
@@ -743,9 +743,7 @@ p_file <- c(param_list$bpks_pool,param_list$bpks_reps) %>%
 
 ![](`r p_file`)
 
-
 ## Region Enrichment {.tabset}
-
 ```{r }
 fl_feats <- file.path("genome_features.bed")
 if(file.exists(fl_feats)){
@@ -854,7 +852,7 @@ plot_feature_enrichment <- function(peak_fls,gr_regions,p_file){
       scale_y_continuous(name = "Footprint fraction",labels=percent) +
       geom_bar(stat='identity',color='black',linewidth=0.5) +
       geom_text(mapping=aes(y=ypos,label=label),size=2) +
-      theme(plot.background = element_rect(fill="white",color="black"),
+      theme(plot.background = element_rect(fill="white",color=NA),
             panel.background = element_blank(),
             panel.grid.major.x = element_blank(),
             panel.grid.major.y = element_line(linewidth=0.5,color='gray80'),
@@ -905,7 +903,7 @@ p_file <- c(param_list$npks_pool,param_list$npks_reps) %>%
   plot_feature_enrichment(gr_regions = gr_regs,p_file = "featureEnrichment_narrowPeaks.png")
 ```
 
-![](`r p_file`)
+![](`r p_file`){width=50%}
 
 ### broadPeaks
 ```{r enrichmentbroadPeaks}
@@ -914,7 +912,7 @@ p_file <- c(param_list$bpks_pool,param_list$bpks_reps) %>%
   plot_feature_enrichment(gr_regions = gr_regs,p_file = "featureEnrichment_broadPeaks.png")
 ```
 
-![](`r p_file`)
+![](`r p_file`){width=50%}
 
 ## FRiP
 ```{r plotFrip,results='asis'}
@@ -1015,6 +1013,9 @@ if(!file.exists(p_file)){
 }
 ```
 
+
+![](`r p_file`){width=50%}
+
 ### Pooled
 ```{r peakDetailsPooledFig.height=8,fig.width=6}
 p_file <- file.path("peak_summaryStats_pooled.png")
@@ -1027,7 +1028,7 @@ if(!file.exists(p_file)){
 }
 ```
 
-![](`r p_file`)
+![](`r p_file`){width=50%}
 
 # Regional plots {.tabset}
 ```{r regionPlotFunctions}
@@ -1036,6 +1037,7 @@ read_peaks <- function(peak_file_list){
     read_peak_file(fl_nm) %>%
       mutate(seqnames = factor(seqnames,levels=paste0("chr",c(1:22,"X","Y")))) %>%
       filter(!is.na(seqnames)) %>%
+      filter(score <= quantile(score,0.99)) %>%
       makeGRangesFromDataFrame(keep.extra.columns = TRUE) %>%
       annotate_and_reduce_gr(retain_funcs = 
         list(name=function(x) x[1],

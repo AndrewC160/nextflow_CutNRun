@@ -130,7 +130,7 @@ fq_raw  <- lapply(names(fq_raw1), function(nm){
 ```
 
 ### Flag summary
-```{r fastqcSummary,fig.height=6,fig.width=6}
+```{r fastqcSummary,fig.height=3,fig.width=2}
 if(is.null(fq_raw$summary)){
   p <- ggplot() + theme_void()
 }else{
@@ -315,7 +315,7 @@ fq_hg38 <- clugPac::read_fastqc(tb_fq$fq_flt_hg38)
 ```
 
 ### Flag summary
-```{r fastqcSummaryFilt,fig.height=6,fig.width=6}
+```{r fastqcSummaryFilt,fig.height=3,fig.width=2}
 tb_p  <- fq_hg38$summary %>%
   mutate(name = gsub("_hg38_short$","",name)) %>%
   separate(name,into=c("cell_line","epitope","cond","rep"),sep = "_",remove = FALSE) %>%
@@ -465,7 +465,7 @@ Alignment percentages are calculated as **reads successfully mapped to hg38 or s
 When calculating scores between samples, the ratio of *Sac3* to *hg38* reads can be used to normalize: we assume all samples had an equivalent number of *Sac3* reads spiked, and thus **any missing *Sac3* reads indicate missing *hg38* reads as well**. For this reason, we can *scale down reads of all samples to match the sample with the lowest ratio*. In other words, **we assume the lowest ratio sample lost reads and so we down-sample all others to match it.**
 
 For instance, if **SampleA** has a ratio of 0.02 and **SampleB** has a ratio of 0.01, each ratio is divided into 0.01 to give factors of 0.5 (**SampleA**) and 1 (**SampleB**). A peak with 100 reads in **SampleA** and 50 reads in **SampleB** would be multiplied by their respective factors to both be 50.
-```{r loadSpikes,fig.height=6,fig.width=8}
+```{r loadSpikes,fig.height=3,fig.width=3}
 fls_spike <- tb_samps %>%
   filter(file.exists(spike_tsv)) %>%
   vectify(spike_tsv,name)
@@ -673,6 +673,7 @@ gr_npks <- lapply(names(tb_npks), function(nm) {
   }) %>% do.call(rbind,.) %>%
   mutate(seqnames = factor(seqnames,levels=paste0("chr",c(1:22,"X","Y")))) %>%
   filter(!is.na(seqnames)) %>%
+  filter(score < quantile(0.95,score)) %>%
   left_join(select(tb_fls,name,cell_line,epitope),by='name') %>%
   makeGRangesFromDataFrame(keep.extra.columns = TRUE)
 

@@ -18,8 +18,8 @@ process memeFIMO {
   script:
   """
   fimo --oc ./ ${motif_file} ${fasta_file}
-  for file in \$(ls ./*); do
-    mv \$file ${prefix}_\$(basename \$file)
-  done
+  #for file in \$(ls ./*); do
+  #  mv \$file ${prefix}_\$(basename \$file)
+  #done
   """
 }

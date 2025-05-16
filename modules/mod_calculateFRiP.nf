@@ -23,7 +23,7 @@ process calculateFRiP {
   reads_peaks=\$(bedtools intersect -a <(cut -f1,2,3 ${bed_file}) -b ${bam_file} -c | awk '{i+=\$4}END{print i}')
   
   #Calculate FRiP.
-  frip_val=\$(echo \"scale=5; \$reads_peaks / (\$reads_total * 0.5)\" | bc)
+  frip_val=\$(echo \"scale=5; \$reads_peaks / (\$reads_total)\" | bc)
   
   echo -e "\$reads_total\t\$reads_peaks\t\$frip_val" >> ${outp_txt}
   """

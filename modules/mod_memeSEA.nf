@@ -17,8 +17,8 @@ process memeSEA {
   #NOTE: Error with SEA; appears to run but fails to make HTML. Revisit later.
   sea --p ${fasta_file} --m ${motif_file} --oc ./ || echo "processed"
   
-  for file in \$(ls ./*); do
-    mv \$file ${prefix}_\$(basename \$file)
-  done
+  #for file in \$(ls ./*); do
+  #  mv \$file ${prefix}_\$(basename \$file)
+  #done
   """
 }
