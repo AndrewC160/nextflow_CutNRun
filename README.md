@@ -147,6 +147,8 @@ se_cutoff    <- metadata(se)                # Super-enhancer area cutoff.
 
 ### MEME Suite (Optional)
 
+NOTE: MEME suite functions currently not working; Conda installation of MEME suite is problematic and thus not effective. Will incorporate direct MEME-suite install at a later date.
+
 Enable with `--run_meme true`.
 
 Processes are included for three [MEME Suite](https://meme-suite.org/meme/) functions to detect DNA binding motifs among peak summits. Note that broadPeaks and often narrowPeaks can be large enough that many MEME functions are prohibitively slow. The functions currently implemented include:
