@@ -14,7 +14,7 @@ process memeSEA {
   
   script:
   """
-  #NOTE: Error with SEA; appears to run but fails to make HTML. Revisit later.
+  #NOTE: Conda install is problematic, must use local install of MEME suite.
   sea --p ${fasta_file} --m ${motif_file} --oc ./ || echo "processed"
   
   #for file in \$(ls ./*); do
