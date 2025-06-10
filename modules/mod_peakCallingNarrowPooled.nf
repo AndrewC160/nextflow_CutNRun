@@ -20,7 +20,8 @@ process peakCallingNarrowPooled {
   
   output:
     tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_peaks.narrowPeak"), emit: "narrowPeaks"
-    tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_summits.bed"), emit: "summits"
+    tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_summit_regions.bed"), emit: "summits"
+    tuple val(sys_idx), val(samp_idx), val(cond_name), val(samp_name), val(epitope), path("${samp_name}_all_summits.bed"), emit: "summitsAll"
     tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_control_lambda.bdg.gz"), path("${samp_name}_control_lambda.bdg.gz.tbi"), emit: "ctrlBDG"
     tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_treat_pileup.bdg.gz"), path("${samp_name}_treat_pileup.bdg.gz.tbi"), emit: "treatBDG"
     tuple val(sys_idx), val(samp_idx), val(samp_name), path(bams_input), path(bams_ctrl),
@@ -38,7 +39,7 @@ process peakCallingNarrowPooled {
   pks2 = "${samp_name}_peaks.narrowPeak"
   sums1 = "${samp_name}_all_summits.bed"
   sums2 = "${samp_name}_blacklist_summits.bed"
-  sums3 = "${samp_name}_summits.bed"
+  sums3 = "${samp_name}_summit_regions.bed"
   bdg_ctrl1 = "${samp_name}_all_control_lambda.bdg"
   bdg_ctrl2 = "${samp_name}_control_lambda.bdg"
   bdg_ctrl3 = "${samp_name}_control_lambda.bdg.gz"
@@ -67,7 +68,8 @@ process peakCallingNarrowPooled {
   wc -l ${pks2} >> ${rpt_blacklist}
   
   # Slop summit regions to 1001bp windows.
-  bedtools slop -i ${sums2} -g ${seqsize_tsv} -b 500 > ${sums3} || true
+  # bedtools slop -i ${sums2} -g ${seqsize_tsv} -b 500 > ${sums3} || true
+  Rscript ${params.dir_R}/merge_summits.R ${sums2} ${sums3} 1001 || true
   
   # Rename, BGZip, and index bedgraph files.
   mv ${bdg_ctrl1} ${bdg_ctrl2}
@@ -82,6 +84,6 @@ process peakCallingNarrowPooled {
   wait
   
   # Remove intermediate files so they don't get published.
-  rm ${pks1} ${sums1} ${sums2}
+  rm ${pks1} ${sums2}
   """
 }
