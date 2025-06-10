@@ -147,7 +147,7 @@ se_cutoff    <- metadata(se)                # Super-enhancer area cutoff.
 
 ### MEME Suite (Optional)
 
-NOTE: MEME suite functions currently not working; Conda installation of MEME suite is problematic and thus not effective. Will incorporate direct MEME-suite install at a later date.
+NOTE: MEME suite functions currently not working; Conda installation of MEME suite is problematic and thus not effective. Will incorporate direct MEME-suite install at a later date. For now, to use MEME functionality you must install the MEME Suite normally and add its binaries to your path *in front of the Conda install's path*.
 
 Enable with `--run_meme true`.
 
