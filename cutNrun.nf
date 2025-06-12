@@ -15,6 +15,7 @@ params.run_fimo = false
 params.run_sea = false
 params.run_centrimo = false
 params.run_cuts = true
+params.pool_report = true
 
 // Directories.
 params.dir_modules = "${projectDir}/modules"
@@ -202,83 +203,85 @@ workflow {
   }
   
   // Pool report.
-  trimming.out.fastqc
-    .map{ row -> row[1,5,6] }
-    .groupTuple()
-    .map{ sys_idx, fq1, fq2 -> tuple(sys_idx,fq1.collect { file(it) },fq2.collect { file(it) } ) }
-    .set { rpt_fqc_trim }
-  readFiltering_hg38.out.fastqc
-    .map { row -> row[1,5] }
-    .groupTuple()
-    .map { id,fq_file -> tuple(id,fq_file.collect{ file(it) }) }
-    .set { rpt_fqc_filt }
-  readFiltering_hg38.out.fastqc
-    .map { row -> row[1,5] }
-    .groupTuple()
-    .map { id, fqc_files -> tuple( id, fqc_files.collect { file(it) }) }
-    .set { rpt_fqc_filt }
-  spike_tsvs
-    .map{ row -> row[0,2] }
-    .map{ id,spike_files -> tuple(id,spike_files.collect { file(it) })}
-    .set { rpt_spike }
-  peakCallingNarrow.out.narrowPeaks
-    .filter{ !it[4].contains(params.control_epitope) }
-    .map { row -> row[1,5] }
-    .groupTuple()
-    .map { id,peak_files -> tuple(id,peak_files.collect { file(it) }) }
-    .set{ rpt_npks_npks_rep }
-  peakCallingNarrow.out.treatBDG
-    .filter{ !it[4].contains(params.control_epitope) }
-    .map { row -> row[1,5,6] }
-    .groupTuple()
-    .map { id,peak_files,indices -> tuple(id,peak_files.collect { file(it) }, indices.collect { file(it) }) }
-    .set{ rpt_npks_bdgs_rep }
-  peakCallingNarrow.out.ctrlBDG
-    .filter{ !it[4].contains(params.control_epitope) }
-    .map { row -> row[1,5,6] }
-    .groupTuple()
-    .map { id,peak_files,indices -> tuple(id,peak_files.collect { file(it) }, indices.collect { file(it) }) }
-    .set{ rpt_npks_bdgs_ctrl_rep }
-  peakCallingBroad.out.broadPeaks
-    .filter{ !it[4].contains(params.control_epitope) }
-    .map { row -> row[1,5] }
-    .groupTuple()
-    .map { id,peak_files -> tuple(id,peak_files.collect { file(it) }) }
-    .set{ rpt_bpks_bpks_rep }
-  calculateFRiP.out.frip
-    .map { row -> row[1,3] }
-    .groupTuple()
-    .map { id,frip_files -> tuple(id,frip_files.collect { file(it) }) }
-    .set{ rpt_frip }
-  peakCallingNarrowPooled.out.narrowPeaks.map { row -> row[1,3] }.set{ rpt_npks_npks_pool }
-  peakCallingNarrowPooled.out.summits.map { row -> row[1,3] }.set { rpt_npks_sums_pool }
-  peakCallingNarrowPooled.out.treatBDG.map { row -> row[1,3,4]}.set { rpt_npks_bdgs_pool }
-  peakCallingNarrowPooled.out.ctrlBDG.map { row -> row[1,3,4]}.set { rpt_npks_bdgs_ctrl_pool }
-  peakCallingBroadPooled.out.broadPeaks.map { row -> row[1,3] }.set{ rpt_bpks_bpks_pool }
-
-  rpt_fqc_trim
-    .join(rpt_fqc_filt)
-    .join(rpt_spike)
-    .join(rpt_npks_npks_rep)
-    .join(rpt_npks_bdgs_rep)
-    .join(rpt_npks_bdgs_ctrl_rep)
-    .join(rpt_bpks_bpks_rep)
-    .join(rpt_frip)
-    .join(rpt_npks_npks_pool)
-    .join(rpt_bpks_bpks_pool)
-    .join(rpt_npks_bdgs_pool)
-    .join(rpt_npks_bdgs_ctrl_pool)
-    .join(rpt_npks_sums_pool)
-    .set { rpt_inputs }
+  if(params.pool_report){
+    trimming.out.fastqc
+      .map{ row -> row[1,5,6] }
+      .groupTuple()
+      .map{ sys_idx, fq1, fq2 -> tuple(sys_idx,fq1.collect { file(it) },fq2.collect { file(it) } ) }
+      .set { rpt_fqc_trim }
+    readFiltering_hg38.out.fastqc
+      .map { row -> row[1,5] }
+      .groupTuple()
+      .map { id,fq_file -> tuple(id,fq_file.collect{ file(it) }) }
+      .set { rpt_fqc_filt }
+    readFiltering_hg38.out.fastqc
+      .map { row -> row[1,5] }
+      .groupTuple()
+      .map { id, fqc_files -> tuple( id, fqc_files.collect { file(it) }) }
+      .set { rpt_fqc_filt }
+    spike_tsvs
+      .map{ row -> row[0,2] }
+      .map{ id,spike_files -> tuple(id,spike_files.collect { file(it) })}
+      .set { rpt_spike }
+    peakCallingNarrow.out.narrowPeaks
+      .filter{ !it[4].contains(params.control_epitope) }
+      .map { row -> row[1,5] }
+      .groupTuple()
+      .map { id,peak_files -> tuple(id,peak_files.collect { file(it) }) }
+      .set{ rpt_npks_npks_rep }
+    peakCallingNarrow.out.treatBDG
+      .filter{ !it[4].contains(params.control_epitope) }
+      .map { row -> row[1,5,6] }
+      .groupTuple()
+      .map { id,peak_files,indices -> tuple(id,peak_files.collect { file(it) }, indices.collect { file(it) }) }
+      .set{ rpt_npks_bdgs_rep }
+    peakCallingNarrow.out.ctrlBDG
+      .filter{ !it[4].contains(params.control_epitope) }
+      .map { row -> row[1,5,6] }
+      .groupTuple()
+      .map { id,peak_files,indices -> tuple(id,peak_files.collect { file(it) }, indices.collect { file(it) }) }
+      .set{ rpt_npks_bdgs_ctrl_rep }
+    peakCallingBroad.out.broadPeaks
+      .filter{ !it[4].contains(params.control_epitope) }
+      .map { row -> row[1,5] }
+      .groupTuple()
+      .map { id,peak_files -> tuple(id,peak_files.collect { file(it) }) }
+      .set{ rpt_bpks_bpks_rep }
+    calculateFRiP.out.frip
+      .map { row -> row[1,3] }
+      .groupTuple()
+      .map { id,frip_files -> tuple(id,frip_files.collect { file(it) }) }
+      .set{ rpt_frip }
+    peakCallingNarrowPooled.out.narrowPeaks.map { row -> row[1,3] }.set{ rpt_npks_npks_pool }
+    peakCallingNarrowPooled.out.summits.map { row -> row[1,3] }.set { rpt_npks_sums_pool }
+    peakCallingNarrowPooled.out.treatBDG.map { row -> row[1,3,4]}.set { rpt_npks_bdgs_pool }
+    peakCallingNarrowPooled.out.ctrlBDG.map { row -> row[1,3,4]}.set { rpt_npks_bdgs_ctrl_pool }
+    peakCallingBroadPooled.out.broadPeaks.map { row -> row[1,3] }.set{ rpt_bpks_bpks_pool }
   
-  poolReport(
-    file("${params.dir_R}/qc_pool.Rmd"),
-    rpt_inputs,
-    params.control_epitope,
-    file(params.sample_table),
-    params.dir_out,
-    file("${params.dir_R}/R_functions/"),
-    file(params.seqsizes),
-    file(params.gene_gtf),
-    file(params.gene_gtf_idx))
+    rpt_fqc_trim
+      .join(rpt_fqc_filt)
+      .join(rpt_spike)
+      .join(rpt_npks_npks_rep)
+      .join(rpt_npks_bdgs_rep)
+      .join(rpt_npks_bdgs_ctrl_rep)
+      .join(rpt_bpks_bpks_rep)
+      .join(rpt_frip)
+      .join(rpt_npks_npks_pool)
+      .join(rpt_bpks_bpks_pool)
+      .join(rpt_npks_bdgs_pool)
+      .join(rpt_npks_bdgs_ctrl_pool)
+      .join(rpt_npks_sums_pool)
+      .set { rpt_inputs }
+    
+    poolReport(
+      file("${params.dir_R}/qc_pool.Rmd"),
+      rpt_inputs,
+      params.control_epitope,
+      file(params.sample_table),
+      params.dir_out,
+      file("${params.dir_R}/R_functions/"),
+      file(params.seqsizes),
+      file(params.gene_gtf),
+      file(params.gene_gtf_idx))
+  }
 }

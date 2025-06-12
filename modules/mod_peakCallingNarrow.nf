@@ -64,7 +64,7 @@ process peakCallingNarrow {
   
   # Slop summit regions to 1001bp windows.
   # bedtools slop -i ${sums2} -g ${seqsize_tsv} -b 500 > ${sums3} || true
-  Rscript ${params.dir_R}/merge_summits.R ${sums2} ${sums3} 1001 || true
+  Rscript ${params.dir_R}/merge_summits.R ${sums2} ${sums3} 1001
   
   # Rename, BGZip, and index bedgraph files.
   mv ${bdg_ctrl1} ${bdg_ctrl2}

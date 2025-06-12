@@ -1,8 +1,6 @@
 #!/bin/Rscript
-# Flatten summits, prioritizing those with the highest fold enrichment in cases where multiple 
-# summits overlap.
-
-options(warn=-1,show.error.messages = FALSE)
+# Flatten summits, prioritizing those with the highest score (fold enrichment) when multiple summits
+# overlap.
 
 library(dplyr)
 library(magrittr)
@@ -36,6 +34,7 @@ gr_out %>%
   ungroup %>%
   select(seqnames,start,end,width,name,score) %>%
   arrange(seqnames,start,end) %>%
+  select(-width) %>%
   fwrite(sep="\t",file=fl_out,quote=FALSE,row.names=FALSE,col.names = FALSE) %>%
   invisible
 

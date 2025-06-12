@@ -21,7 +21,7 @@ process peakCallingNarrowPooled {
   output:
     tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_peaks.narrowPeak"), emit: "narrowPeaks"
     tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_summit_regions.bed"), emit: "summits"
-    tuple val(sys_idx), val(samp_idx), val(cond_name), val(samp_name), val(epitope), path("${samp_name}_all_summits.bed"), emit: "summitsAll"
+    tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_all_summits.bed"), emit: "summitsAll"
     tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_control_lambda.bdg.gz"), path("${samp_name}_control_lambda.bdg.gz.tbi"), emit: "ctrlBDG"
     tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_treat_pileup.bdg.gz"), path("${samp_name}_treat_pileup.bdg.gz.tbi"), emit: "treatBDG"
     tuple val(sys_idx), val(samp_idx), val(samp_name), path(bams_input), path(bams_ctrl),
@@ -69,7 +69,7 @@ process peakCallingNarrowPooled {
   
   # Slop summit regions to 1001bp windows.
   # bedtools slop -i ${sums2} -g ${seqsize_tsv} -b 500 > ${sums3} || true
-  Rscript ${params.dir_R}/merge_summits.R ${sums2} ${sums3} 1001 || true
+  Rscript ${params.dir_R}/merge_summits.R ${sums2} ${sums3} 1001
   
   # Rename, BGZip, and index bedgraph files.
   mv ${bdg_ctrl1} ${bdg_ctrl2}
