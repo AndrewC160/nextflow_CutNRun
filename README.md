@@ -171,13 +171,13 @@ To test/troubleshoot pipeline outputs, “stub” files can be generated: an opt
 
 Output files are stored in the directory specified using `--dir_out`, within which `pooled` and `replicate` folders will be created. Analyses of pooled samples are stored in the former, individual replicates in the latter. Peak calling is performed by [MACS3](https://github.com/macs3-project/MACS). For individual replicates, no background is used: signal in a given region is compared to signal across the genome. This is not ideal, particularly in samples with complex genomes. For pooled peak calling, MACS3 concatenates all replicates (treatment and background), then calls peaks using background samples to normalize for sequencing biases, copy number, etc. Note that this pipeline runs under the assumption that *treatment and background samples were produced within the same sequencing run, the same cell type, and under the same conditions*. To modify this, alter the columns in the input CSV. For instance, to use IgG background samples from one sequencing project as controls for another, assign the replicates the same project name. This is not advised, however, as background samples should be produced alongside treatment samples.
 
-Among the outputs for each pool, the `_spike.tsv` file includes read counts as well as the total number of reads aligned to the primary genome vs. the spike genome. This is useful when normalizing signal between samples. The `_report.html` file includes basic quality control metrics and plots of pileup among high-scoring peaks, and the `_file_summary.tsv` file contains output file locations.
+Among the outputs for each pool, the `_spike.tsv` file includes read counts as well as the total number of reads aligned to the primary genome vs. the spike genome. This is useful when normalizing signal between samples. The `_report.html` file includes basic quality control metrics and plots of pileup among high-scoring peaks, and the `_pools.tsv` and `_replicates.tsv` files contains basic QC values and output filenames for pooled samples and their individual replicates, respectively. Note that these tables can be joined by the `rep_names` column in the `replicates table` and the `reps` and `reps_bkg` columns in the `pool` table.
 ```
 data
-├── project
-│   ├── project_report.html
-│   ├── pools.tsv
-│   ├── replicates.tsv
+├── run1
+│   ├── run1_report.html
+│   ├── run1_pools.tsv
+│   ├── run1_replicates.tsv
 │   ├── H358_MYC_WT
 │   │   ├── align
 │   │   ├── meme
