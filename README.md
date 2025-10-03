@@ -127,7 +127,9 @@ Each replicate should have a unique combination of project/cell_line/epitope/rep
 
 > Replicates: `<cell_line>_<epitope>_<condition>_<replicate>`
 
-> Pools: `<cell_line>_<epitope>_<condition>_<project>`
+> Pools: `<cell_line>_<epitope>_<condition>`
+
+Also note that for now the pipeline should be run on one project at a time: presumably background samples and replicates from the same project are generated with similar protocols and are thus more comparable, and this will avoid mixing disparate protocol outputs when processing outputs.
 
 ### ROSE (Optional)
 
