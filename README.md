@@ -24,7 +24,7 @@ The environment can then be activated using:
 
 `PATH=$(readlink -e ngsutilsj):$PATH`
 
-This pipeline is also is missing R packages `clugPac`, `ascFunctions`, and `ascCutNRun`. These will be updated later, but for now essential functions are included in the R/R_functions directory which is sourced as necessary. All other R packages are included within the `conda_evn.yml` file.
+This pipeline is also is missing R packages `clugPac`, `ascFunctions`, and `ascCnR`. These will be updated later, but for now essential functions are included in the R/R_functions directory which is sourced as necessary. All other R packages are included within the `conda_env.yml` file.
 
 ## Configuration
 
