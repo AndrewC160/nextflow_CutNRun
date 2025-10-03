@@ -28,7 +28,7 @@ This pipeline is also is missing R packages `clugPac`, `ascFunctions`, and `ascC
 
 ## Configuration
 
-By default Nextflow will operate within the bounds of the system it is run on (i.e. respecting memory/CPU limitations, etc.), but the nextflow.config file can be edited to set these limits explicitly.
+By default Nextflow will operate within the bounds of the system it is run on (i.e. respecting memory/CPU limitations, etc.), but the `nextflow.config` file can be edited to set these limits explicitly.
 
 ### Resources
 
