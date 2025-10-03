@@ -1,75 +1,59 @@
 #!/usr/bin/env nextflow
 
 process poolReport {
-  tag "${pool_name}"
-  publishDir "${params.dir_pool}/${pool_name}/qc/report", mode: 'copy', pattern: "*.html"
-  publishDir "${params.dir_pool}/${pool_name}/qc/report", mode: 'copy', pattern: "*.png"
-  publishDir "${params.dir_pool}/${pool_name}", mode: 'copy', pattern: "*_file_summary.tsv"
-  publishDir "${params.dir_pool}/${pool_name}/qc/report", mode: 'copy', pattern: "*.tsv"
+  tag "${proj_name}"
+  publishDir "${params.dir_out}/${proj_name}", mode: 'copy', pattern: "*.html"
+  publishDir "${params.dir_out}/${proj_name}", mode: 'copy', pattern: "*.tsv"
   
   input:
-    path(r_markdown)
-    tuple val(pool_name), 
-          path(fqc_trim1),
-          path(fqc_trim2),
-          path(fqc_filt),
-          path(tsv_spikes),
-          path(npks_rep),
-          path(bdgs_rep),
-          path(bdgs_rep_tbi),
-          path(bdgs_rep_ctrl),
-          path(bdgs_rep_ctrl_tbi),
-          path(bpks_rep),
-          path(frip),
-          path(npks_pool),
-          path(bpks_pool),
-          path(bdgs_pool),
-          path(bdgs_pool_tbi),
-          path(bdgs_pool_ctrl),
-          path(bdgs_pool_ctrl_tbi),
-          path(sums_pool)
-    val(ctrl_epitope)
-    path(sample_table)
-    val(output_dir)
-    path(R_dir)
-    path(seqsizes)
-    path(gene_gtf)
-    path(gene_gtf_idx)
-  
+	val proj_name
+	path reps_tsv
+	path pool_tsv
+	path sample_table
+	val ctrl_epitope
+	val output_dir
+	path R_dir
+	path seqsizes, stageAs: "seqsizes.tsv"
+	path gene_gtf, stageAs: "genes.gtf"
+	path gene_gtf_idx, stageAs: "genes.gtf.tbi"
+	path r_markdown
+	path trim_rep, stageAs: "reps/qc/*"
+	path alg_prime, stageAs: "reps/align/*"
+	path alg_spike, stageAs: "reps/align/*"
+	path bam_best, stageAs: "reps/align/*"
+	path flt_prime, stageAs: "reps/qc/*"
+	path flt_prime_alg, stageAs: "reps/align/*"
+	path npk_reps, stageAs: "reps/qc/*"
+	path npk_reps_pks, stageAs: "reps/peaks/*"
+	path bpk_reps, stageAs: "reps/qc/*"
+	path bpk_reps_pks, stageAs: "reps/peaks/*"
+	path npk_pool, stageAs: "pool/qc/*"
+	path npk_pool_pks, stageAs: "pool/peaks/*"
+	path bpk_pool, stageAs: "pool/qc/*"
+	path bpk_pool_pks, stageAs: "pool/peaks/*"
+	path frip_reps, stageAs: "reps/qc/*"
+	path spikes_pool, stageAs: "pool/align/*"
+	//path fimo, stageAs: "pool/fimo/*"
+	//path fimo_npks, stageAs: "pool/fimo_npks/*"
+	//path sea, stageAs: "pool/sea/*"
+	//path sea_npks, stageAs: "pool/sea_npks/*"
+	//path centrimo, stageAs: "pool/centrimo/*"
+	//path rose, stageAs: "pool/rose/*"
+
   output:
-    path "${pool_name}_report.html"
-    path "${pool_name}_file_summary.tsv"
-    path "*.tsv"
-    path "*.png"
-  
+    path report_file
+	path "*.tsv"
+
   script:
-  report_file="${pool_name}_report.html"
+  report_file="${proj_name}_report.html"
+  
   """
   Rscript -e 'rmarkdown::render("${r_markdown}",output_format="html_document",
-    output_file="${report_file}",output_dir=".",intermediates_dir=".",quiet=TRUE,
-    params=list(
-      pool_name="${pool_name}",
-      ctrl_epitope="${ctrl_epitope}",
-      fastqc_trim1="${fqc_trim1}",
-      fastqc_trim2="${fqc_trim2}",
-      fastqc_filt="${fqc_filt}",
-      tsv_spike="${tsv_spikes}",
-      npks_reps="${npks_rep}",
-      bdgs_reps="${bdgs_rep}",
-      bdgs_reps_ctrl="${bdgs_rep_ctrl}",
-      bpks_reps="${bpks_rep}",
-      tsvs_frip="${frip}",
-      npks_pool="${npks_pool}",
-      sums_pool="${sums_pool}",
-      bdgs_pool="${bdgs_pool}",
-      bdgs_pool_ctrl="${bdgs_pool_ctrl}",
-      bpks_pool="${bpks_pool}",
-      sample_table="${sample_table}",
-      output_dir="${output_dir}",
-      seqsizes="${seqsizes}",
-      gene_gtf="${gene_gtf}",
-      R_dir="${R_dir}"
-    )
+	output_file="${report_file}",output_dir=".",intermediates_dir=".",quiet=TRUE,
+	params=list(
+		ctrl_epitope="${ctrl_epitope}",
+		out_dir="${output_dir}"
+	)
   )'
   """
 }

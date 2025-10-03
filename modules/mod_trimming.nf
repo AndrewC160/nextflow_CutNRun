@@ -1,28 +1,33 @@
 #!/usr/bin/env nextflow
 
 process trimming {
-  tag "${samp_name}"
-  publishDir "${params.dir_reps}/${samp_name}/qc", mode: 'copy', pattern: "*_trim_report.txt"
-  publishDir "${params.dir_reps}/${samp_name}/qc", mode: 'copy', pattern: "*.zip"
-  publishDir "${params.dir_reps}/${samp_name}/qc", mode: 'copy', pattern: "*.html"
+  tag "${meta.replicate_name}"
+  publishDir "${meta.rep_dir}/qc", mode: 'copy', pattern: "*_trim_report.txt"
+  publishDir "${meta.rep_dir}/qc", mode: 'copy', pattern: "*.zip"
+  publishDir "${meta.rep_dir}/qc", mode: 'copy', pattern: "*.html"
   
   input:
-    tuple val(sys_idx), val(samp_idx), val(cond_name), val(samp_name), val(epitope), path(fastq_r1), path(fastq_r2)
-  
+    tuple val(meta), path(fastq_r1), path(fastq_r2)
+
   output:
-    tuple val(sys_idx), val(samp_idx), val(cond_name), val(samp_name), val(epitope), path("${samp_name}_val_1.fq"), path("${samp_name}_val_2.fq"), emit: "trimmed"
-    tuple val(sys_idx), val(samp_idx), val(cond_name), val(samp_name), val(epitope), path("${samp_name}_val_1_fastqc.zip"), path("${samp_name}_val_2_fastqc.zip"), emit: "fastqc"
-    path "*"
+	tuple val(meta), path(fastq_r1_out), path(fastq_r2_out), emit: "trimmed"
+	tuple val(meta), path(fastq_r1_out), path(fastq_r2_out), emit: "fastqc"
+	tuple path(rpt_fl), path(fastq_r1_fqc), path(fastq_r2_fqc), emit: "report_qc"
+	path "*"
   
   script:
-  rpt_fl = "${samp_name}_trim_report.txt"
+  fastq_r1_out = "${meta.replicate_name}_val_1.fq"
+  fastq_r2_out = "${meta.replicate_name}_val_2.fq"
+  fastq_r1_fqc = "${meta.replicate_name}_val_1_fastqc.zip"
+  fastq_r2_fqc = "${meta.replicate_name}_val_2_fastqc.zip"
+  rpt_fl = "${meta.replicate_name}_trim_report.txt"
   """
   trim_galore \
     --paired \
     --quality 30 \
     --fastqc \
     --dont_gzip \
-    --basename '${samp_name}' \
+    --basename '${meta.replicate_name}' \
     --cores 4 \
     ${fastq_r1} ${fastq_r2}
   

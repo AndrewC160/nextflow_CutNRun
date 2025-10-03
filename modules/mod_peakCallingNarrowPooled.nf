@@ -1,59 +1,63 @@
 #!/usr/bin/env nextflow
 
 process peakCallingNarrowPooled {
-  tag "${samp_idx}"
+  tag "${pool_name}"
   cpus 1
   memory '16GB'
   
-  publishDir "${params.dir_pool}/${samp_idx}/qc", mode: 'copy', pattern: "*_report.txt"
-  publishDir "${params.dir_pool}/${samp_idx}/qc", mode: 'copy', pattern: "*.tsv"
-  publishDir "${params.dir_pool}/${samp_idx}/peaks", mode: 'copy', pattern: "*.tbi"
-  publishDir "${params.dir_pool}/${samp_idx}/peaks", mode: 'copy', pattern: "*.gz"
-  publishDir "${params.dir_pool}/${samp_idx}/peaks", mode: 'copy', pattern: "*.bed"
-  publishDir "${params.dir_pool}/${samp_idx}/peaks", mode: 'copy', pattern: "*.tsv"
-  publishDir "${params.dir_pool}/${samp_idx}/peaks", mode: 'copy', pattern: "*.narrowPeak"
+  publishDir "${pool_dir}/qc", mode: 'copy', pattern: "*_report.txt"
+  publishDir "${pool_dir}/qc", mode: 'copy', pattern: "*.tsv"
+  publishDir "${pool_dir}/peaks", mode: 'copy', pattern: "*.tbi"
+  publishDir "${pool_dir}/peaks", mode: 'copy', pattern: "*.gz"
+  publishDir "${pool_dir}/peaks", mode: 'copy', pattern: "*.bed"
+  publishDir "${pool_dir}/peaks", mode: 'copy', pattern: "*.tsv"
+  publishDir "${pool_dir}/peaks", mode: 'copy', pattern: "*.narrowPeak"
   
   input:
-    tuple val(sys_idx), val(samp_idx), val(samp_name), path(bams_input), path(bams_ctrl)
+	tuple val(meta), path(bams_input), path(bams_ctrl)
     path blacklist_bed
     path seqsize_tsv
   
   output:
-    tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_peaks.narrowPeak"), emit: "narrowPeaks"
-    tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_summit_regions.bed"), emit: "summits"
-    tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_all_summits.bed"), emit: "summitsAll"
-    tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_control_lambda.bdg.gz"), path("${samp_name}_control_lambda.bdg.gz.tbi"), emit: "ctrlBDG"
-    tuple val(sys_idx), val(samp_idx), val(samp_name), path("${samp_name}_treat_pileup.bdg.gz"), path("${samp_name}_treat_pileup.bdg.gz.tbi"), emit: "treatBDG"
-    tuple val(sys_idx), val(samp_idx), val(samp_name), path(bams_input), path(bams_ctrl),
-      path("${samp_name}_peaks.narrowPeak"), 
-      path("${samp_name}_treat_pileup.bdg.gz"),
-      path("${samp_name}_treat_pileup.bdg.gz.tbi"), 
-      path("${samp_name}_control_lambda.bdg.gz"),
-      path("${samp_name}_control_lambda.bdg.gz.tbi"), emit: "ROSE"
+	tuple val(meta), path(pks2), emit: "narrowPeaks"
+	tuple val(meta), path(sums3), emit: "summits"
+	tuple val(meta), path(sums1), emit: "summitsAll"
+	tuple val(meta), path(bdg_ctrl3), path(bdg_ctrl3i), emit: "ctrlBDG"
+	tuple val(meta), path(bdg_treat3), path(bdg_treat3i), emit: "treatBDG"
+    tuple val(meta), path(bams_input), path(bams_ctrl), 
+	  path(pks2),
+	  path(bdg_treat3), path(bdg_treat3i), 
+	  path(bdg_ctrl3), path(bdg_ctrl3i), emit: "ROSE"
+	tuple path(pks2), path(sums3), path(bdg_treat3), path(bdg_treat3i), path(bdg_ctrl3), path(bdg_ctrl3i), emit: "report_peaks"
+	path rpt_fl, emit: "report_qc"
     path "*.txt"
     path "*.tsv"
   
   script:
-  rpt_fl = "${samp_name}_narrowPeaks_report.txt"
-  pks1 = "${samp_name}_all_peaks.narrowPeak"
-  pks2 = "${samp_name}_peaks.narrowPeak"
-  sums1 = "${samp_name}_all_summits.bed"
-  sums2 = "${samp_name}_blacklist_summits.bed"
-  sums3 = "${samp_name}_summit_regions.bed"
-  bdg_ctrl1 = "${samp_name}_all_control_lambda.bdg"
-  bdg_ctrl2 = "${samp_name}_control_lambda.bdg"
-  bdg_ctrl3 = "${samp_name}_control_lambda.bdg.gz"
-  bdg_treat1 = "${samp_name}_all_treat_pileup.bdg"
-  bdg_treat2 = "${samp_name}_treat_pileup.bdg"
-  bdg_treat3 = "${samp_name}_treat_pileup.bdg.gz"
-  rpt_blacklist = "${samp_name}_blacklist_narrowPeaks.tsv"
+  pool_name = meta.pool_name
+  pool_dir = meta.pool_dir
+  rpt_fl = "${pool_name}_narrowPeaks_report.txt"
+  pks1 = "${pool_name}_all_peaks.narrowPeak"
+  pks2 = "${pool_name}_peaks.narrowPeak"
+  sums1 = "${pool_name}_all_summits.bed"
+  sums2 = "${pool_name}_blacklist_summits.bed"
+  sums3 = "${pool_name}_summit_regions.bed"
+  bdg_ctrl1 = "${pool_name}_all_control_lambda.bdg"
+  bdg_ctrl2 = "${pool_name}_control_lambda.bdg"
+  bdg_ctrl3 = "${pool_name}_control_lambda.bdg.gz"
+  bdg_ctrl3i= "${bdg_ctrl3}.tbi"
+  bdg_treat1 = "${pool_name}_all_treat_pileup.bdg"
+  bdg_treat2 = "${pool_name}_treat_pileup.bdg"
+  bdg_treat3 = "${pool_name}_treat_pileup.bdg.gz"
+  bdg_treat3i= "${bdg_treat3}.tbi"
+  rpt_blacklist = "${pool_name}_blacklist_narrowPeaks.tsv"
   """
   macs3 callpeak \
   	-t ${bams_input} \
   	-c ${bams_ctrl} \
   	-f BAMPE \
   	-g 2.7e9 \
-  	-n ${samp_name}'_all'\
+  	-n ${pool_name}'_all'\
   	-q 0.01 \
   	-B \
   	--call-summits \
@@ -64,12 +68,11 @@ process peakCallingNarrowPooled {
   bedtools subtract -A -a ${sums1} -b ${blacklist_bed} > ${sums2}
   
   # Count blacklisted peaks.
-  wc -l ${pks1} > ${rpt_blacklist}
+  wc -l ${pks1} >  ${rpt_blacklist}
   wc -l ${pks2} >> ${rpt_blacklist}
   
-  # Slop summit regions to 1001bp windows.
-  # bedtools slop -i ${sums2} -g ${seqsize_tsv} -b 500 > ${sums3} || true
-  Rscript ${params.dir_R}/merge_summits.R ${sums2} ${sums3} 1001
+  # Slop summit regions to 500bp windows.
+  Rscript ${params.dir_R}/merge_summits.R ${sums2} ${sums3} 500
   
   # Rename, BGZip, and index bedgraph files.
   mv ${bdg_ctrl1} ${bdg_ctrl2}

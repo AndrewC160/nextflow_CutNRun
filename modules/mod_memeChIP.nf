@@ -1,11 +1,11 @@
 #!/usr/bin/env nextflow
 
-process memeFIMO {
+process memeChIP {
   tag "${meta.pool_name}"
   cpus 1
   memory '64GB'
   
-  publishDir "${meta.pool_dir}/meme/fimo/${prefix}", mode: 'copy', pattern: "*"
+  publishDir "${meta.pool_dir}/meme/memechip/${prefix}", mode: 'copy', pattern: "*"
   
   input:
 	tuple val(meta), path(fasta_file)
@@ -17,6 +17,6 @@ process memeFIMO {
   
   script:
   """
-  fimo --oc ./ ${motif_file} ${fasta_file}
+  meme-chip --oc ./ -db ${motif_file} ${fasta_file}
   """
 }

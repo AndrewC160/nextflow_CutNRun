@@ -29,16 +29,26 @@ read_peak_file <- function(file_name,name_col=NULL,is_narrowPeak) {
       stop("File extension '",ext,"' not recognized.")
     }
   }
+  # Suppress warnings in case fread() encounters empty peak files. Desired behavior is to just return
+  # an empty tibble with appropriate column numbers/names (since this function frequently runs on
+  # lists of files followed by rbind()).
   if(is_narrowPeak){
-    tb_out <- fread(file_name,col.names = c("seqnames","start","end","name","score","strand","fc_summit","nlog10p","nlog10q","summit_pos"))
+    col_nms<- c("seqnames","start","end","name","score","strand","fc_summit","nlog10p","nlog10q","summit_pos")
+    tb_out <- fread(file_name,col.names = col_nms) %>% suppressWarnings
   }else{
-    tb_out <- fread(file_name,col.names = c("seqnames","start","end","name","score","strand","fc_summit","nlog10p","nlog10q"))
+    col_nms<- c("seqnames","start","end","name","score","strand","fc_summit","nlog10p","nlog10q")
+    tb_out <- fread(file_name,col.names = col_nms) %>% suppressWarnings
   }
-  if(!is.null(name_col)){
-    if(name_col == "base_name"){
-      tb_out<- mutate(tb_out,set = basename(file_name))
-    }else{
-      tb_out<- mutate(tb_out,set = name_col)
+  if(nrow(tb_out) == 0){
+    if(!is.null(name_col)) col_nms<- c(col_nms,"set")
+    tb_out <- setNames(rep(NA,length(col_nms)),col_nms) %>% rbind %>% as_tibble %>% filter(row_number() != 1)
+  }else{
+    if(!is.null(name_col)){
+      if(name_col == "base_name"){
+        tb_out<- mutate(tb_out,set = basename(file_name))
+      }else{
+        tb_out<- mutate(tb_out,set = name_col)
+      }
     }
   }
   return(tb_out)

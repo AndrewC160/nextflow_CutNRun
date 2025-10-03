@@ -1,20 +1,20 @@
 #!/usr/bin/env nextflow
 
 process ROSE {
-  tag "${samp_idx}"
+  tag "${meta.pool_name}"
   cpus 6
   memory '16GB'
-  publishDir "${params.dir_pool}/${samp_idx}/ROSE", mode: 'copy'
+  publishDir "${meta.pool_dir}/ROSE", mode: 'copy'
   
   input:
-    tuple val(sys_idx), val(samp_idx), val(samp_name),
-      path(bams_input),
-      path(bams_ctrl),
-      path(peaks_input),
-      path(treat_pileup),
-      path(treat_pileup_tbi),
-      path(ctrl_pileup),
-      path(ctrl_pileup_tbi)
+	tuple val(meta),
+		path(bams_input),
+		path(bams_ctrl),
+		path(peaks_input),
+		path(treat_pileup),
+		path(treat_pileup_tbi),
+		path(ctrl_pileup),
+		path(ctrl_pileup_tbi)
     path(r_markdown)
     path(R_dir)
     path(gene_gtf)
@@ -27,12 +27,12 @@ process ROSE {
     path "*.png"
   
   script:
-  rose_file="${samp_idx}_ROSE.html"
+  rose_file="${meta.pool_name}_ROSE.html"
   """
   Rscript -e 'rmarkdown::render("${r_markdown}",output_format="html_document",
     output_file="${rose_file}",output_dir=".",intermediates_dir=".",quiet=TRUE,
     params=list(
-      pool_name="${samp_idx}",
+      pool_name="${meta.pool_name}",
       bams_test="${bams_input}",
       bams_ctrl="${bams_ctrl}",
       peak_file="${peaks_input}",

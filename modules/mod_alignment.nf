@@ -1,25 +1,25 @@
 #!/usr/bin/env nextflow
 
 process alignment {
-  tag "${samp_name}"
+  tag "${meta.replicate_name}"
   cpus 8
   memory '32.GB'
   
-  publishDir "${params.dir_reps}/${samp_name}/qc", mode: 'copy', pattern: "*.txt"
+  publishDir "${meta.rep_dir}/qc", mode: 'copy', pattern: "*.txt"
   
   input:
-    tuple val(sys_idx), val(samp_idx), val(cond_name), val(samp_name), val(epitope), path(fastq_r1), path(fastq_r2)
+    tuple val(meta), path(fastq_r1), path(fastq_r2)
     path bowtie2_idx
   
   output:
-    tuple val(sys_idx), val(samp_idx), val(cond_name), val(samp_name), val(epitope), path("*.bam"), emit: "aligned"
+    tuple val(meta), path(out_bam), emit: "aligned"
+	path rpt_fl, emit: "report_qc"
     path "*"
   
   script:
   gen_nm = bowtie2_idx.baseName
-  out_bam = "${samp_name}_${gen_nm}_unfiltered.bam"
-  rpt_fl = "${samp_name}_${gen_nm}_alignment_report.txt"
-  
+  out_bam = "${meta.replicate_name}_${gen_nm}_unfiltered.bam"
+  rpt_fl = "${meta.replicate_name}_${gen_nm}_alignment_report.txt"
   """
   bowtie2 \
     -x ${bowtie2_idx}/${gen_nm} \

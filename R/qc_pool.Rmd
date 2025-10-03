@@ -9,7 +9,15 @@ output:
     theme: spacelab
     code_folding: hide
 params:
-  pool_name: "OS526_FOSL2_NONE_antibody_survey"
+  pool_name: "OS525_K4Me_NONE"
+  npks_pool: "/N/p/asclab/ASC-cutNrun/nextflow_v2/work/ae/4728c85b7900b86304676abf16a7a1/OS525_K4Me_NONE_peaks.narrowPeak"
+  sums_pool: "/N/p/asclab/ASC-cutNrun/nextflow_v2/work/ae/4728c85b7900b86304676abf16a7a1/OS525_K4Me_NONE_summit_regions.bed"
+  bdgs_pool: "/N/p/asclab/ASC-cutNrun/nextflow_v2/work/ae/4728c85b7900b86304676abf16a7a1/OS525_K4Me_NONE_treat_pileup.bdg.gz"
+  bdgs_pool_ctrl: "/N/p/asclab/ASC-cutNrun/nextflow_v2/work/ae/4728c85b7900b86304676abf16a7a1/OS525_K4Me_NONE_control_lambda.bdg.gz"
+  bpks_pool: "/N/p/asclab/ASC-cutNrun/nextflow_v2/work/b3/4e1747113181a029ff739f1c31fcf0/OS525_K4Me_NONE_peaks.broadPeak"
+  tsv_spike: "/N/p/asclab/ASC-cutNrun/nextflow_v2/work/dc/61837e1b62fdaaac3be6adbfaa5102/OS525_K4Me_NONE_spike.tsv"
+  rep_names: "OS525_K4Me_NONE_2,OS525_K4Me_NONE_1"
+  
   ctrl_epitope: "IgG"
   sample_table: "file_table.csv"
   output_dir: "/N/p/asclab/ASC-cutNrun/25APR26-antibody_survey/data"
@@ -17,17 +25,16 @@ params:
   fastqc_trim1: "OS526_FOSL2_NONE_1_val_1_fastqc.zip"
   fastqc_trim2: "OS526_FOSL2_NONE_1_val_2_fastqc.zip"
   fastqc_filt: "OS526_FOSL2_NONE_1_hg38_short_fastqc.zip"
-  tsv_spike: "OS526_FOSL2_NONE_1_spike.tsv"
+  
   npks_reps: "OS526_FOSL2_NONE_1_peaks.narrowPeak"
   bdgs_reps: "OS526_FOSL2_NONE_1_treat_pileup.bdg.gz"
   bdgs_reps_ctrl: "OS526_FOSL2_NONE_1_control_lambda.bdg.gz"
   bpks_reps: "OS526_FOSL2_NONE_1_peaks.broadPeak"
   tsvs_frip: "OS526_FOSL2_NONE_1_narrowPeaks_FRiP.txt"
-  npks_pool: "OS526_FOSL2_NONE_peaks.narrowPeak"
-  sums_pool: "OS526_FOSL2_NONE_summits.bed"
-  bdgs_pool: "OS526_FOSL2_NONE_treat_pileup.bdg.gz"
-  bdgs_pool_ctrl: "OS526_FOSL2_NONE_control_lambda.bdg.gz"
-  bpks_pool: "OS526_FOSL2_NONE_peaks.broadPeak"
+  
+  
+  
+ 
   gene_gtf: "Homo_sapiens.GRCh38.104.chr.tabix.gtf.gz"
   seqsizes: "hg38_seqsizes.tsv"
 ---

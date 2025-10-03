@@ -1,15 +1,15 @@
 #!/usr/bin/env nextflow
 
 process truncateFastQs{
-  tag "${samp_idx}"
+  tag "${meta.replicate_name}"
   cpus 6
   
   input:
-  tuple val(sys_idx), val(samp_idx), val(cond_name), val(samp_name), val(epitope), path(fastq_r1), path(fastq_r2)
-  val fastq_reads
+    tuple val(meta), path(fastq_r1), path(fastq_r2)
+    val fastq_reads
   
   output:
-  tuple val(sys_idx), val(samp_idx), val(cond_name), val(samp_name), val(epitope), path(fastq_r1_out), path(fastq_r2_out)
+    tuple val(meta), path(fastq_r1_out), path(fastq_r2_out), emit: "fastqs"
   
   script:
   fastq_r1_out = "${fastq_r1.getSimpleName()}_trunc.fastq.gz"

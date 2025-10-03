@@ -1,29 +1,30 @@
 #!/usr/bin/env nextflow
 
 process bamBest {
-  tag "${samp_name}"
-  publishDir "${params.dir_reps}/${samp_name}/align", mode: 'copy', pattern: "*.tsv"
+  tag "${rep_id}"
+  publishDir "${meta.rep_dir}/align", mode: 'copy', pattern: "*.tsv"
   
   input:
-    tuple val(sys_idx), val(samp_idx), val(cond_name), val(samp_name), val(epitope), path(bam_hg38_in), path(bam_sac3_in)
+	tuple val(rep_id), val(meta), path(bam_primary), val(meta_spike), path(bam_spike)
   
   output:
-    tuple val(sys_idx), val(samp_idx), val(cond_name), val(samp_name), val(epitope), path("${samp_name}_hg38.bam"), emit: "hg38"
-    tuple val(sys_idx), val(samp_idx), val(cond_name), val(samp_name), val(epitope), path("${samp_name}_sac3.bam"), emit: "sac3"
-    tuple val(sys_idx), val(samp_idx), val(cond_name), val(samp_name), val(epitope), path("${samp_name}_spike.tsv"), emit: "spike"
-  
+    tuple val(meta), val(meta.genome), path(bam_primary_out), emit: "primary_bam"
+	tuple val(meta), val(meta.genome_spike), path(bam_spike_out), emit: "spike_bam"
+	tuple val(meta), path(tsv_spike), emit: "spikes"
+	path tsv_spike, emit: "report_align"
+
   script:
-  bam_hg38_out = "${samp_name}_hg38.bam"
-  bam_sac3_out = "${samp_name}_sac3.bam"
-  tsv_spike = "${samp_name}_spike.tsv"
+  bam_primary_out = "${rep_id}.bam"
+  bam_spike_out = "${rep_id}_spike.bam"
+  tsv_spike = "${rep_id}_spike.tsv"
   """
-  ngsutilsj bam-best \
+  bash ${params.dir_resources}/ngsutilsj bam-best \
     --stats ${tsv_spike} \
     --unsorted \
-    ${bam_hg38_in} \
-    ${bam_sac3_in} \
+    ${bam_primary} \
+    ${bam_spike} \
     -- \
-    ${bam_hg38_out} \
-    ${bam_sac3_out}
+    ${bam_primary_out} \
+    ${bam_spike_out}
   """
 }
