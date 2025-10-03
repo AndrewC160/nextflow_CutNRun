@@ -147,17 +147,17 @@ se_cutoff    <- metadata(se)                # Super-enhancer area cutoff.
 
 ### MEME Suite (Optional)
 
-NOTE: MEME suite functions currently not working; Conda installation of MEME suite is problematic and thus not effective. Will incorporate direct MEME-suite install at a later date. For now, to use MEME functionality you must install the MEME Suite normally and add its binaries to your path *in front of the Conda install's path*.
+NOTE: Conda installation of MEME suite is problematic. To use MEME functions, ensure that you have added MEME-suite executables to your path *in front of the Conda install's path*.
 
-Enable with `--run_meme true`.
+Processes are included for four [MEME Suite](https://meme-suite.org/meme/) functions to detect DNA binding motifs among peak summits. Note that while it is possible to run SEA and FIMO on narrowPeaks, this is not advised as these peak regions can be large enough to make many MEME functions prohibitively slow (CENTRIMO and MEME-ChIP require a standardized sequence length and so these are only run on summits). The functions currently implemented include:
 
-Processes are included for three [MEME Suite](https://meme-suite.org/meme/) functions to detect DNA binding motifs among peak summits. Note that broadPeaks and often narrowPeaks can be large enough that many MEME functions are prohibitively slow. The functions currently implemented include:
+-[MEME-ChIP](https://web.mit.edu/meme_v4.11.4/share/doc/meme-chip.html): Wrapper for multiple MEME-suite functions that include CENTRIMO and FIMO; maybe just run this instead. Enable with `--run_memechip`.
 
--[SEA](https://meme-suite.org/meme/tools/sea): Simple Enrichment analysis; determines if any motifs are significantly enriched within peak summits relative to randomized sequences of the same FASTA.
+-[SEA](https://meme-suite.org/meme/tools/sea): Simple Enrichment analysis; determines if any motifs are significantly enriched within peak summits relative to randomized sequences of the same FASTA. Enable with `--run_sea`, and run on narrowPeaks with `--run_sea_nPeaks`.
 
--[CENTRIMO](https://meme-suite.org/meme/tools/centrimo): Determine if motifs have a significant preference for a location within peak summits.
+-[CENTRIMO](https://meme-suite.org/meme/tools/centrimo): Determine if motifs have a significant preference for a location within peak summits. Performed by MEME-ChIP as well. Enable with `--run_centrimo`.
 
--[FIMO](https://meme-suite.org/meme/tools/fimo): Finding Individual Motif Occurences; identifies DNA binding motifs within peak summits.
+-[FIMO](https://meme-suite.org/meme/tools/fimo): Finding Individual Motif Occurences; identifies DNA binding motifs within peak summits. Enable with `--run_fimo`, and run on narrowPeaks with `--run_fimo_nPeaks`.
 
 ### Stub files (Optional)
 
@@ -174,16 +174,19 @@ Output files are stored in the directory specified using `--dir_out`, within whi
 Among the outputs for each pool, the `_spike.tsv` file includes read counts as well as the total number of reads aligned to the primary genome vs. the spike genome. This is useful when normalizing signal between samples. The `_report.html` file includes basic quality control metrics and plots of pileup among high-scoring peaks, and the `_file_summary.tsv` file contains output file locations.
 ```
 data
-├── pooled
-│   ├── H358_MYC_WT_run1
+├── project
+│   ├── project_report.html
+│   ├── pools.tsv
+│   ├── replicates.tsv
+│   ├── H358_MYC_WT
+│   │   ├── align
 │   │   ├── meme
 │   │   │   ├── centrimo
 │   │   │   ├── fimo
+│   │   │   ├── memechip
 │   │   │   └── sea
 │   │   ├── peaks
-│   │   │   └── cuts
 │   │   ├── qc
-│   │   │   └── H358_MYC_WT_run1_report.html
 │   │   ├── ROSE
 │   │   |   ├── H358_MYC_WT_run1_ROSEoutput.rds
 │   │   |   ├── H358_MYC_WT_run1_ROSEoutput.tsv
@@ -202,7 +205,7 @@ data
     └── H358_IgG_WT_1
         ├── align
         ├── peaks
-        └── qc  
+        └── qc
 ```
 
 ### nextflow_cutNrun/work
