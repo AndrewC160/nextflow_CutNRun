@@ -65,7 +65,7 @@ Only required if MEME Suite functions are to be used.
 
 `--blacklist blacklist_file.bed`
 
-A bedfile of genomic blacklists should be provided. These are available for many genomes here, but keep in mind these files should be unzipped.
+A bedfile of genomic blacklists should be provided. These are available for many genomes [here](https://github.com/Boyle-Lab/Blacklist), but keep in mind these files should be unzipped.
 
 #### Seqsizes
 
